@@ -1,0 +1,256 @@
+import { GingerSnapProps } from "./index";
+import { Credentials } from "./Credentials";
+import {
+  BodyType,
+  MapOfHeaders,
+  MethodConfiguration,
+  RequestType,
+  ResponseType,
+  ServiceInternalProps,
+} from "../utils/types";
+import * as R from "ramda";
+import { Call } from "./Call";
+import CallExecutionError from "../../errors/CallExecutionError";
+import { Model } from "./Model";
+
+type CredentialFunctorWithArg = (credentials: Credentials) => Call<Credentials> | Promise<Credentials> | Credentials;
+type CredentialFunctor = () => Call<Credentials> | Promise<Credentials> | Credentials;
+
+interface AuthInstance {
+  authRefresher?: CredentialFunctorWithArg;
+  authenticator?: CredentialFunctor;
+  global: boolean;
+}
+
+export class Service {
+  private readonly baseUrl?: string;
+  private readonly retryLimit?: number;
+  private readonly __internal__!: ServiceInternalProps;
+  private static authRefresher?: CredentialFunctorWithArg;
+  private static authenticator?: CredentialFunctor;
+  private static credentials?: Credentials;
+  protected context: any;
+
+  constructor({ baseUrl, retryLimit }: GingerSnapProps = {}) {
+    this.baseUrl = baseUrl;
+    this.retryLimit = retryLimit;
+    this.__internal__ = this.__internal__ ?? { classConfig: {}, methodConfig: {} };
+  }
+
+  private convertToJSON(value: any): string {
+    if (value instanceof Model) {
+      return value.json();
+    } else if (value instanceof Array) {
+      return `[${value.map((v) => this.convertToJSON(v))}]`;
+    }
+    return JSON.stringify(value);
+  }
+
+  private __setup__(): void {
+    const hostname = this.__internal__.classConfig.baseUrl ?? this.baseUrl ?? "";
+    const self = this;
+    R.forEach(([key, value]) => {
+      let headers = value.headers ?? {};
+      const apiPath = value.apiPath ?? "";
+
+      if (value.requestType === undefined) {
+        throw new Error("Request type is missing for one of the annotated methods");
+      }
+      const requestType: RequestType = value.requestType;
+      const oldMethod = self[key];
+      const auth: AuthInstance = { global: value.authRefresher?.global ?? value.authenticator?.global ?? false };
+
+      self[key] = (...args: any[]) => {
+        let body: any;
+        const url = new URL(hostname);
+        url.pathname = apiPath;
+        return new Call(
+          async (signal) => {
+            headers = { ...headers, ...this.__get_auth_headers__(auth) };
+            if (value.parameters) {
+              R.forEach(([key, index]: [any, number]) => {
+                const arg: any = args[index];
+                if (arg === undefined) {
+                  throw new CallExecutionError(`header parameter is missing at index ${index}`);
+                }
+                if (typeof key === "symbol" && typeof arg === "object") {
+                  headers = { ...headers, ...arg };
+                } else {
+                  headers[key] = headers[key] ? `${R.prop(key, headers)};${String(args[index])}` : String(args[index]);
+                }
+              }, R.toPairs(value.parameters.headers ?? {}));
+
+              R.forEach(([key, index]: [any, number]) => {
+                if (args[index] === undefined) {
+                  throw new CallExecutionError(`path parameter is missing at index ${index}`);
+                }
+                url.pathname = url.pathname.replace(encodeURI(`{${key}}`), encodeURI(args[index]));
+              }, R.toPairs(value.parameters.pathVariables ?? {}));
+
+              R.forEach(([key, index]: [any, number]) => {
+                const arg = args[index];
+                if (arg === undefined) {
+                  throw new CallExecutionError(`query parameter is missing at index ${index}`);
+                }
+                if (typeof key === "symbol" && typeof arg === "object") {
+                  R.forEach(([k, v]: [string, string]) => {
+                    url.searchParams.set(k, v);
+                  }, R.toPairs(arg));
+                } else {
+                  url.searchParams.set(key, arg);
+                }
+              }, R.toPairs(value.parameters.queries ?? {}));
+
+              if (value.parameters.body?.type) {
+                switch (value.parameters.body.type) {
+                  case (BodyType.JSON, BodyType.STRING): {
+                    const index = value.parameters.body.parameterIndex;
+                    if (args[index] === undefined) {
+                      throw new CallExecutionError(`body parameter is missing at index ${index}`);
+                    }
+                    body = this.convertToJSON(args[index]);
+                    break;
+                  }
+                  case BodyType.XML: {
+                    const index = value.parameters.body.parameterIndex;
+                    const arg = args[index];
+                    if (arg === undefined) {
+                      throw new CallExecutionError(`body parameter is missing at index ${index}`);
+                    }
+
+                    body = arg instanceof Model ? arg.xml() : new XMLSerializer().serializeToString(arg);
+                    break;
+                  }
+                  case BodyType.FORMURLENCODED: {
+                    const formData = new URLSearchParams();
+                    R.forEach(([key, index]: [string, number]) => {
+                      const arg = args[index];
+                      if (arg === undefined) {
+                        throw new CallExecutionError(`form field is missing at index ${index}`);
+                      }
+                      formData.set(key, arg);
+                    }, R.toPairs(value.parameters.body.fields));
+                    body = formData;
+                    break;
+                  }
+                  case BodyType.MULTIPART: {
+                    const formData = new FormData();
+                    R.forEach(([key, index]: [string, number]) => {
+                      const arg = args[index];
+                      if (arg === undefined) {
+                        throw new CallExecutionError(`form part is missing at index ${index}`);
+                      }
+                      formData.append(key, arg);
+                    }, R.toPairs(value.parameters.body.parts));
+                    body = formData;
+                    break;
+                  }
+                  default:
+                    throw new CallExecutionError(`Unsupported body type: ${value.parameters.body.type}`);
+                }
+              }
+            }
+            let fetcher: (input: RequestInfo | URL, init?: any) => Promise<Response>;
+            if (typeof window === "undefined") fetcher = require("node-fetch");
+            else fetcher = fetch;
+
+            return await fetcher(url, { signal, headers, method: requestType.toString(), body }).then(async (resp) => {
+              let credentials: Credentials | undefined;
+              if (
+                resp.status === 401 &&
+                self[key] !== auth.authenticator &&
+                self[key] !== auth.authRefresher &&
+                (credentials = await this.__get_credentials__(auth))
+              ) {
+                return await fetcher(url, {
+                  signal,
+                  headers: { ...headers, ...credentials.buildAuthHeaders() },
+                  method: requestType.toString(),
+                  body,
+                });
+              }
+              return resp;
+            });
+          },
+          oldMethod,
+          value.responseClass,
+          value.throttle,
+          value.responseType ?? ResponseType.NONE,
+          value.responseArray === true
+        );
+      };
+      this.__setup_authentication__(value, self[key], auth);
+    }, R.toPairs(this.__internal__.methodConfig));
+  }
+
+  private __get_auth_headers__(auth: AuthInstance): MapOfHeaders {
+    const classRef = this.constructor as any as typeof Service;
+    if (!auth.global && classRef.credentials) return classRef.credentials.buildAuthHeaders();
+    else if (auth.global && Service.credentials) return Service.credentials.buildAuthHeaders();
+    return {};
+  }
+
+  private async __get_credentials__(auth: AuthInstance): Promise<Credentials | undefined> {
+    let result: any;
+    let credentials: Credentials;
+    const classRef = this.constructor as any as typeof Service;
+
+    if (auth.global && Service.credentials && auth.authRefresher) {
+      result = auth.authRefresher(Service.credentials);
+    } else if (!auth.global && classRef.credentials && auth.authRefresher) {
+      result = auth.authRefresher(classRef.credentials);
+    } else if (auth.authenticator) {
+      result = auth.authenticator();
+    } else {
+      return;
+    }
+
+    if (result instanceof Call) {
+      credentials = await result.execute();
+    } else if (result instanceof Promise) {
+      credentials = await result;
+    } else {
+      credentials = result;
+    }
+
+    if (auth.global) Service.credentials = credentials;
+    else classRef.credentials = credentials;
+
+    return credentials;
+  }
+
+  private __setup_authentication__(
+    config: MethodConfiguration,
+    functor: CredentialFunctorWithArg | CredentialFunctor,
+    auth: AuthInstance
+  ) {
+    const classRef = this.constructor as any as typeof Service;
+    if (config.authenticator) {
+      if (config.authenticator.global && !Service.authenticator) {
+        Service.authenticator = functor as CredentialFunctor;
+      } else if (!config.authenticator.global && !classRef.authenticator) {
+        classRef.authenticator = functor as CredentialFunctor;
+      }
+    }
+
+    if (config.authRefresher) {
+      if (config.authRefresher.global && !Service.authRefresher) {
+        Service.authRefresher = functor;
+      } else if (!config.authRefresher.global && !classRef.authRefresher) {
+        classRef.authRefresher = functor;
+      }
+    }
+
+    if (Service.authenticator) {
+      auth.authenticator = Service.authenticator;
+    } else if (classRef.authenticator) {
+      auth.authenticator = classRef.authenticator;
+    }
+
+    if (Service.authRefresher) {
+      auth.authRefresher = Service.authRefresher;
+    } else if (classRef.authRefresher) {
+      auth.authRefresher = classRef.authRefresher;
+    }
+  }
+}

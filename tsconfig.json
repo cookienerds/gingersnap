@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "module": "ESNext",
+    "noImplicitAny": false,
+    "moduleResolution": "NodeNext",
+    "preserveConstEnums": true,
+    "sourceMap": true,
+    "strict": true,
+    "experimentalDecorators": true,
+    "esModuleInterop": true,
+    "emitDecoratorMetadata": true,
+    "target": "ES5",
+    "outDir": "lib",
+    "lib": [
+      "dom",
+      "es2021.intl",
+      "es2015"
+    ],
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules"]
+}
