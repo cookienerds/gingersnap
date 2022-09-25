@@ -1,12 +1,14 @@
 {
   "name": "gingersnap",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "framework for handling network requests",
   "main": "index.js",
   "scripts": {
-    "build": "npm run remove-old-build && npm run compile && npm run copy-package-json",
+    "build": "npm run remove-old-build && npm run compile && npm run remove-test-build && npm run restructure-build && npm run copy-package-json",
     "copy-package-json": "cp package.json lib",
+    "remove-test-build": "rm -rf lib/tests && rm -rf lib/**/__mocks__/*",
     "remove-old-build": "rm -rf lib",
+    "restructure-build": "mv lib/src/* lib && rm -rf lib/src",
     "lint": "eslint",
     "test": "jest",
     "test-with-coverage": "jest --coverage",
