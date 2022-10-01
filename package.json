@@ -58,6 +58,7 @@
   },
   "jest": {
     "testEnvironment": "jsdom",
+    "coverageReporters": ["html", "text", "text-summary", "cobertura"],
     "transform": {
       "^.+\\.ts$": "ts-jest",
       "^.+\\.js$": "babel-jest"
