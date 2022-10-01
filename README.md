@@ -9,10 +9,8 @@ Gingersnap is a library for managing network requests, data serialization/deseri
 To use as an NPM package in a project:
 1. Request a token for connection to the CookieNerds NPM Area
 2. Create a .npmrc file inside your project and add the following <br />
-   `
-   @cookienerds:registry=https://gitlab.com/api/v4/projects/31753272/packages/npm/
-   //gitlab.com/api/v4/projects/31753272/packages/npm/:_authToken="MY_TOKEN_HERE"
-   `
+   `@cookienerds:registry=https://gitlab.com/api/v4/projects/31753272/packages/npm/` <br />
+   `//gitlab.com/api/v4/projects/31753272/packages/npm/:_authToken="MY_TOKEN_HERE"`
 3. To install the package, run `npm install @cookienerds/gingersnap`
 
 ## Support
