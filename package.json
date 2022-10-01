@@ -1,5 +1,5 @@
 {
-  "name": "gingersnap",
+  "name": "@cookienerds/gingersnap",
   "version": "0.0.2",
   "description": "framework for handling network requests",
   "main": "index.js",
