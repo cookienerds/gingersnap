@@ -57,12 +57,6 @@ export class UserService extends Service {
     return PASS;
   }
 
-  @GET("users/{id}")
-  @JSONResponse(User)
-  public getUser(@Path("id") id: string): Call<User> {
-    return PASS;
-  }
-
   @GET("users")
   @JSONResponse(User)
   @Throttle
@@ -73,7 +67,7 @@ export class UserService extends Service {
   @GET("users?tel=1234567")
   @JSONResponse(User)
   @ThrottleBy({ waitPeriodInMs: 1000 })
-  public getUserByTel(@Query("contact_no") tel: string): Call<User> {
+  public getUserByTel(@Query("tel") tel: string): Call<User> {
     return PASS;
   }
 

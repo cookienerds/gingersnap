@@ -25,7 +25,7 @@ export interface Callable<T extends Model | Model[] | String | String[] | Blob |
   execute: (rawResponse?: boolean) => Promise<T>;
 }
 
-abstract class AbstractCall<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE>
+export abstract class AbstractCall<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE>
   implements Callable<T>
 {
   /**
@@ -111,6 +111,9 @@ abstract class AbstractCall<T extends Model | Model[] | String | String[] | Blob
         }
         const Class = this.ModelClass as typeof Model;
         return Class.fromXML<any>(await resp.text());
+      }
+      case ResponseType.BINARY: {
+        return (await resp.blob()) as T;
       }
       default:
         return null as T;

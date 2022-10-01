@@ -43,7 +43,7 @@ export class Service {
     } else if (value instanceof Array) {
       return `[${value.map((v) => this.convertToJSON(v))}]`;
     }
-    return JSON.stringify(value);
+    return typeof value === "string" ? value : JSON.stringify(value);
   }
 
   private __setup__(): void {
@@ -52,22 +52,37 @@ export class Service {
     R.forEach(([key, value]) => {
       let headers = value.headers ?? {};
       const apiPath = value.apiPath ?? "";
-
-      if (value.requestType === undefined) {
-        throw new Error("Request type is missing for one of the annotated methods");
-      }
-      const requestType: RequestType = value.requestType;
       const oldMethod = self[key];
       const auth: AuthInstance = { global: value.authRefresher?.global ?? value.authenticator?.global ?? false };
 
+      if (value.requestType === undefined) {
+        this.__setup_authentication__(value, key, self[key], auth);
+        return;
+      }
+
+      const requestType: RequestType = value.requestType;
+
       self[key] = (...args: any[]) => {
         let body: any;
-        const url = new URL(hostname);
-        url.pathname = apiPath;
+        const url = new URL(
+          (hostname.endsWith("/") ? hostname.substring(0, hostname.length) : hostname) +
+            (apiPath.startsWith("/") ? apiPath : "/" + apiPath)
+        );
         return new Call(
           async (signal) => {
             headers = { ...headers, ...this.__get_auth_headers__(auth) };
             if (value.parameters) {
+              const paramHeaders = value.parameters.headers ?? {};
+              const paramQueries = value.parameters.queries ?? {};
+              const paramHeaderPairs: any = R.concat(
+                R.toPairs(paramHeaders),
+                R.map((k) => [k, (paramHeaders as any)[k]], Object.getOwnPropertySymbols(paramHeaders))
+              );
+              const paramQueryPairs: any = R.concat(
+                R.toPairs(paramQueries),
+                R.map((k) => [k, (paramQueries as any)[k]], Object.getOwnPropertySymbols(paramQueries))
+              );
+
               R.forEach(([key, index]: [any, number]) => {
                 const arg: any = args[index];
                 if (arg === undefined) {
@@ -78,7 +93,7 @@ export class Service {
                 } else {
                   headers[key] = headers[key] ? `${R.prop(key, headers)};${String(args[index])}` : String(args[index]);
                 }
-              }, R.toPairs(value.parameters.headers ?? {}));
+              }, paramHeaderPairs);
 
               R.forEach(([key, index]: [any, number]) => {
                 if (args[index] === undefined) {
@@ -99,11 +114,15 @@ export class Service {
                 } else {
                   url.searchParams.set(key, arg);
                 }
-              }, R.toPairs(value.parameters.queries ?? {}));
+              }, paramQueryPairs);
 
               if (value.parameters.body?.type) {
                 switch (value.parameters.body.type) {
-                  case (BodyType.JSON, BodyType.STRING): {
+                  case BodyType.JSON:
+                  case BodyType.STRING: {
+                    if (value.parameters.body.type === BodyType.JSON) {
+                      headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+                    }
                     const index = value.parameters.body.parameterIndex;
                     if (args[index] === undefined) {
                       throw new CallExecutionError(`body parameter is missing at index ${index}`);
@@ -122,6 +141,7 @@ export class Service {
                     break;
                   }
                   case BodyType.FORMURLENCODED: {
+                    headers["Content-Type"] = headers["Content-Type"] ?? "application/x-www-form-urlencoded";
                     const formData = new URLSearchParams();
                     R.forEach(([key, index]: [string, number]) => {
                       const arg = args[index];
@@ -134,6 +154,7 @@ export class Service {
                     break;
                   }
                   case BodyType.MULTIPART: {
+                    headers["Content-Type"] = headers["Content-Type"] ?? "multipart/form-data";
                     const formData = new FormData();
                     R.forEach(([key, index]: [string, number]) => {
                       const arg = args[index];
@@ -146,7 +167,7 @@ export class Service {
                     break;
                   }
                   default:
-                    throw new CallExecutionError(`Unsupported body type: ${value.parameters.body.type}`);
+                    throw new CallExecutionError(`Unsupported body type: ${(value.parameters.body as any)?.type}`);
                 }
               }
             }
@@ -179,7 +200,7 @@ export class Service {
           value.responseArray === true
         );
       };
-      this.__setup_authentication__(value, self[key], auth);
+      this.__setup_authentication__(value, key, self[key], auth);
     }, R.toPairs(this.__internal__.methodConfig));
   }
 
@@ -221,6 +242,7 @@ export class Service {
 
   private __setup_authentication__(
     config: MethodConfiguration,
+    methodName: string,
     functor: CredentialFunctorWithArg | CredentialFunctor,
     auth: AuthInstance
   ) {
@@ -231,6 +253,25 @@ export class Service {
       } else if (!config.authenticator.global && !classRef.authenticator) {
         classRef.authenticator = functor as CredentialFunctor;
       }
+
+      const parentRef = config.authenticator.global ? Service : classRef;
+
+      const oldMethod: any = (this as any)[methodName];
+      (this as any)[methodName] = (...args: any[]) => {
+        const result = oldMethod(...args);
+        if (result instanceof Promise) {
+          return result.then((v) => {
+            if (v instanceof Credentials) {
+              parentRef.credentials = v;
+            }
+            return v;
+          });
+        } else if (result instanceof Credentials) {
+          parentRef.credentials = result;
+        }
+
+        return result;
+      };
     }
 
     if (config.authRefresher) {

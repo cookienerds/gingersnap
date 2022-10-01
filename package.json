@@ -1,6 +1,6 @@
 {
   "name": "@cookienerds/gingersnap",
-  "version": "0.0.4",
+  "version": "1.0.0",
   "description": "framework for handling network requests",
   "main": "index.js",
   "scripts": {
@@ -33,6 +33,7 @@
     "@types/ramda": "^0.28.15",
     "@typescript-eslint/eslint-plugin": "^5.37.0",
     "babel-jest": "^29.0.3",
+    "blob-polyfill": "^7.0.20220408",
     "eslint": "^8.2.0",
     "eslint-config-airbnb": "^19.0.4",
     "eslint-config-prettier": "^8.5.0",

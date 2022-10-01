@@ -1,13 +1,13 @@
 import { Credentials } from "../core/Credentials";
 
 export enum RequestType {
-  GET = 1,
-  PUT,
-  POST,
-  DELETE,
-  PATCH,
-  OPTIONS,
-  HEAD,
+  GET = "GET",
+  PUT = "PUT",
+  POST = "POST",
+  DELETE = "DELETE",
+  PATCH = "PATCH",
+  OPTIONS = "OPTIONS",
+  HEAD = "HEAD",
 }
 
 export enum ResponseType {

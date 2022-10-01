@@ -1,5 +1,8 @@
 import { GingerSnap } from "../src/annotations/core";
-import { UserService } from "./services/user";
+import { User, UserService } from "./services/user";
+import * as R from "ramda";
+import { UtilService } from "./services/util";
+import "blob-polyfill";
 
 const MOCKED_USERS = [
   {
@@ -28,11 +31,6 @@ const MOCKED_USERS = [
     ],
   },
 ];
-const MOCKED_PROFILES = MOCKED_USERS.map((v) => ({
-  ...v,
-  profilePicture: "picture.jpeg",
-  bioLink: `https://wiki.com/${encodeURI(v.name)}`,
-}));
 
 describe("Test Network Service", function () {
   it("should lookup all users", async () => {
@@ -121,5 +119,280 @@ describe("Test Network Service", function () {
     expect(String(profile.bestie?.name)).toEqual("Sandy Carter");
     expect(String(profile.profilePicture)).toEqual("picture.jpeg");
     expect(String(profile.bioLink)).toEqual(`https://wiki.com/${encodeURI(profile.name.toString())}`);
+  });
+
+  it("should create user", async () => {
+    (global.fetch as any) = async () => ({
+      json: async () => R.clone(MOCKED_USERS[0]),
+      status: 200,
+      ok: true,
+    });
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UserService);
+    const resp = await service.createUser(User.fromJSON(MOCKED_USERS[0])).execute();
+    expect(resp instanceof User).toBeTruthy();
+    expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
+  });
+
+  it("should delete user", async () => {
+    (global.fetch as any) = async (url: string, options: any) => {
+      if (url.toString() === "https://test.com/users/test-id" && options.headers["Session-Id"] === "test-session") {
+        return {
+          json: async () => R.clone(MOCKED_USERS[0]),
+          status: 200,
+          ok: true,
+        };
+      }
+      return {
+        text: async () => "",
+        status: 400,
+        ok: false,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UserService);
+    const resp = await service.deleteUser("test-id", "test-session").execute();
+    expect(resp instanceof User).toBeTruthy();
+    expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
+  });
+
+  it("should update user", async () => {
+    (global.fetch as any) = async (url: string, options: any) => {
+      if (
+        url.toString() === "https://test.com/users/test-id" &&
+        options.headers["Session-Id"] === "test-session" &&
+        options.method.toLowerCase() === "put"
+      ) {
+        return {
+          json: async () => R.clone(MOCKED_USERS[0]),
+          status: 200,
+          ok: true,
+        };
+      }
+      return {
+        text: async () => "",
+        status: 400,
+        ok: false,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UserService);
+    const resp = await service
+      .updateUser(User.fromJSON(MOCKED_USERS[0]), "test-id", { "Session-Id": "test-session" })
+      .execute();
+    expect(resp instanceof User).toBeTruthy();
+    expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
+  });
+
+  it("should get user by query", async () => {
+    (global.fetch as any) = async (url: string, options: any) => {
+      if (url.toString() === "https://test.com/users?name=test" && options.method.toLowerCase() === "get") {
+        return {
+          json: async () => R.clone(MOCKED_USERS[0]),
+          status: 200,
+          ok: true,
+        };
+      } else if (
+        url.toString() === "https://test.com/users?name=test&tel=1234567" &&
+        options.method.toLowerCase() === "get"
+      ) {
+        return {
+          json: async () => R.clone(MOCKED_USERS[0]),
+          status: 200,
+          ok: true,
+        };
+      }
+      return {
+        text: async () => "",
+        status: 400,
+        ok: false,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UserService);
+    const start = performance.now();
+    let resp = await service.getUserByName("test").execute();
+    const end = performance.now();
+
+    // Check that the request was throttled
+    expect(end - start).toBeGreaterThan(3000);
+    expect(resp instanceof User).toBeTruthy();
+    expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
+
+    resp = await service.getUserByProperties({ name: "test", tel: "1234567" }).execute();
+    expect(resp instanceof User).toBeTruthy();
+    expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
+  });
+
+  it("should get user by overriding queries", async () => {
+    (global.fetch as any) = async (url: string, options: any) => {
+      if (url.toString() === "https://test.com/users?tel=0987654321" && options.method.toLowerCase() === "get") {
+        return {
+          json: async () => R.clone(MOCKED_USERS[0]),
+          status: 200,
+          ok: true,
+        };
+      }
+      return {
+        text: async () => "",
+        status: 400,
+        ok: false,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UserService);
+    const start = performance.now();
+    const resp = await service.getUserByTel("0987654321").execute();
+    const end = performance.now();
+
+    // Check that the request was throttled
+    expect(end - start).toBeGreaterThan(1000);
+    expect(end - start).toBeLessThan(2000);
+    expect(resp instanceof User).toBeTruthy();
+    expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
+  });
+
+  it("should complete health check", async () => {
+    (global.fetch as any) = async (url: string, options: any) => ({
+      text: async () => "Ok",
+      status: 200,
+      ok: true,
+    });
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UtilService);
+    const resp: String = await service.healthCheck().execute();
+
+    expect(resp instanceof String).toBeTruthy();
+    expect(resp.toString()).toEqual("Ok");
+  });
+
+  it("should get binary data response", async () => {
+    (global.fetch as any) = async (url: string, options: any) => ({
+      blob: async () => new Blob(["Ok"]),
+      status: 200,
+      ok: true,
+    });
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UtilService);
+    const resp = await service.downloadFile().execute();
+
+    expect(resp instanceof Blob).toBeTruthy();
+    expect(await resp.text()).toEqual("Ok");
+  });
+
+  it("should upload text file", async () => {
+    (global.fetch as any) = async (url: string, options: any) => {
+      expect(options.body).toEqual("sample text");
+      return {
+        status: 200,
+        ok: true,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UtilService);
+    const resp = await service.uploadTextFile("sample text").execute();
+
+    expect(resp).toBe(null);
+  });
+
+  it("should upload form urlencoded", async () => {
+    (global.fetch as any) = async (url: string, options: any) => {
+      expect(options.body instanceof URLSearchParams).toBeTruthy();
+      expect(options.headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
+      expect(Array.from(options.body.entries())).toEqual([
+        ["name", "test"],
+        ["age", "21"],
+      ]);
+      return {
+        status: 200,
+        ok: true,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UtilService);
+    const resp = await service.uploadUserForm("test", 21).execute();
+
+    expect(resp).toBe(null);
+  });
+
+  it("should upload multipart with auth", async () => {
+    let called = 0;
+    (global.fetch as any) = async (url: string, options: any) => {
+      called++;
+      if (!options.headers.Authorization) {
+        return {
+          status: 401,
+          ok: false,
+        };
+      }
+      expect(options.headers.Authorization.includes("Basic ")).toBeTruthy();
+      expect(options.headers["Content-Type"]).toBe("multipart/form-data");
+      expect(options.body instanceof FormData).toBeTruthy();
+      expect(Array.from(options.body.entries())).toEqual([
+        ["file", new File([new Blob(["test"])], "name")],
+        ["name", "test-upload"],
+      ]);
+      return {
+        status: 200,
+        ok: true,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UtilService);
+    const resp = await service.uploadFileAndName(new Blob(["test"]), "test-upload").execute();
+
+    expect(resp).toBe(null);
+    expect(called).toBe(2);
+  });
+
+  it("should upload xml with auth refresh", async () => {
+    let refreshed = false;
+    (global.fetch as any) = async (url: string, options: any) => {
+      if (url.toString() === "https://test.com/api/v1/auth/refresh") {
+        refreshed = true;
+        return {
+          json: async () => ({
+            username: "test",
+            password: "password",
+          }),
+          status: 200,
+          ok: true,
+        };
+      } else if (url.toString() === "https://test.com/upload/xml" && refreshed) {
+        expect(options.headers.Authorization).toEqual(`Basic ${btoa("test:password")}`);
+        expect(options.body).toEqual(User.fromJSON(MOCKED_USERS[0]).xml());
+        return {
+          status: 200,
+          ok: true,
+        };
+      } else if (url.toString() === "https://test.com/upload/xml" && !refreshed) {
+        return {
+          status: 401,
+          ok: false,
+        };
+      }
+      return {
+        text: async () => "",
+        status: 400,
+        ok: false,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UtilService);
+    service.loginAnonymously();
+    const resp = await service.uploadXML(User.fromJSON(MOCKED_USERS[0])).execute();
+
+    expect(resp).toBe(null);
   });
 });

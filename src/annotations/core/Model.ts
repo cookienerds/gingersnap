@@ -1,6 +1,7 @@
 import * as R from "ramda";
 import ParsingError from "../../errors/ParsingError";
 import X2JS from "x2js";
+import "reflect-metadata";
 
 interface IgnoreProps {
   serialize?: boolean;
@@ -84,7 +85,7 @@ export class Model {
       (acc, [key, fieldProps]) => {
         if (fieldProps.ignore?.deserialize) return acc;
 
-        const value: any = R.prop(fieldProps.name as any, fieldProps);
+        const value: any = R.prop(fieldProps.name as any, this);
         acc[key] = deserialize(value);
         return acc;
       },

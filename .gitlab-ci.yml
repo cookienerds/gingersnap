@@ -17,6 +17,8 @@ validate:
 
 build_image:
   stage: build
+  only:
+    - release
   script:
     - npm run build
     - npm config set registry https://gitlab.com/api/v4/projects/31753272/packages/npm/

@@ -37,7 +37,7 @@ const createRequestBodyDecorator = (type: BodyType) => (target: any, propertyKey
 const createRequestMultiBodyDecorator = (type: BodyType) => (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "body"]);
-  const changer = R.compose(R.mergeDeepLeft({ type }), R.or({}));
+  const changer = R.compose(R.mergeDeepLeft({ type }), R.or<any, any>(R.__, {}));
   proto.__internal__ = R.over(lens, changer, proto.__internal__);
 };
 
@@ -45,7 +45,7 @@ const createRequestMultiBodyParameterDecorator =
   (key: string) => (value: string) => (target: any, propertyKey: string, parameterIndex: number) => {
     const proto = createProps(target.constructor);
     const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "body", key]);
-    const changer = R.compose(R.mergeDeepLeft({ [value]: parameterIndex }), R.or({}));
+    const changer = R.compose(R.mergeDeepLeft({ [value]: parameterIndex }), R.or<any, any>(R.__, {}));
     proto.__internal__ = R.over(lens, changer, proto.__internal__);
   };
 
@@ -73,7 +73,7 @@ export const FormUrlEncoded = createRequestMultiBodyDecorator(BodyType.FORMURLEN
 export const Headers = (value: MapOfHeaders) => (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "headers"]);
-  const changer = R.compose(R.mergeDeepLeft(value), R.or({}));
+  const changer = R.compose(R.mergeDeepLeft(value), R.or<any, any>(R.__, {}));
   proto.__internal__ = R.over(lens, changer, proto.__internal__);
 };
 
@@ -92,7 +92,7 @@ export const ThrottleBy = (value: ThrottleByProps) => (target: any, propertyKey:
 export const Authenticator =
   <T>(type: T, global = false) =>
   (target: any, propertyKey: string) => {
-    const proto = createProps(target);
+    const proto = createProps(target.constructor);
     const lens = R.lensPath(["methodConfig", propertyKey, "authenticator"]);
     proto.__internal__ = R.set(lens, { type, global }, proto.__internal__);
   };
@@ -100,7 +100,7 @@ export const Authenticator =
 export const AuthRefresher =
   <T>(type: T, global = false) =>
   (target: any, propertyKey: string) => {
-    const proto = createProps(target);
+    const proto = createProps(target.constructor);
     const lens = R.lensPath(["methodConfig", propertyKey, "authRefresher"]);
     proto.__internal__ = R.set(lens, { type, global }, proto.__internal__);
   };
@@ -121,7 +121,7 @@ export const QueryMap = (target: any, propertyKey: string, parameterIndex: numbe
   const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "queries"]);
   proto.__internal__ = R.over(
     lens,
-    R.compose(R.mergeDeepWith(R.concat, { [Symbol(propertyKey)]: parameterIndex }), R.or({})),
+    R.compose(R.mergeLeft<any, any>({ [Symbol(propertyKey)]: parameterIndex }, R.__), R.or<any, any>(R.__, {})),
     proto.__internal__
   );
 };
@@ -139,7 +139,7 @@ export const Path = (value: string) => {
     const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "pathVariables"]);
     proto.__internal__ = R.over(
       lens,
-      R.compose(R.mergeDeepWith(R.concat, { [value]: parameterIndex }), R.or({})),
+      R.compose(R.mergeDeepWith(R.concat, { [value]: parameterIndex }), R.or<any, any>(R.__, {})),
       proto.__internal__
     );
   };
@@ -158,7 +158,7 @@ export const Query = (value: string) => {
     const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "queries"]);
     proto.__internal__ = R.over(
       lens,
-      R.compose(R.mergeDeepWith(R.concat, { [value]: parameterIndex }), R.or({})),
+      R.compose(R.mergeDeepWith(R.concat, { [value]: parameterIndex }), R.or<any, any>(R.__, {})),
       proto.__internal__
     );
   };
@@ -177,7 +177,7 @@ export const Header = (value: string) => {
     const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "headers"]);
     proto.__internal__ = R.over(
       lens,
-      R.compose(R.mergeDeepWith(R.concat, { [value]: parameterIndex }), R.or({})),
+      R.compose(R.mergeDeepWith(R.concat, { [value]: parameterIndex }), R.or<any, any>(R.__, {})),
       proto.__internal__
     );
   };
@@ -186,9 +186,10 @@ export const Header = (value: string) => {
 export const HeaderMap = (target: any, propertyKey: string, parameterIndex: number) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "headers"]);
+  const key = Symbol(propertyKey);
   proto.__internal__ = R.over(
     lens,
-    R.compose(R.mergeDeepWith(R.concat, { [Symbol(propertyKey)]: parameterIndex }), R.or({})),
+    R.compose(R.mergeLeft<any, any>({ [key]: parameterIndex }, R.__), R.or<any, any>(R.__, {})),
     proto.__internal__
   );
 };

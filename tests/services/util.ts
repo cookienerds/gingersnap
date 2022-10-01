@@ -19,6 +19,7 @@ import {
 } from "../../src/annotations/utils/network/options";
 import { NONE, PASS } from "../../src/annotations/utils/types";
 import { BasicCredentials } from "../../src/annotations/core/Credentials";
+import { User } from "./user";
 
 @BaseUrl("https://test.com")
 export class UtilService extends Service {
@@ -61,7 +62,7 @@ export class UtilService extends Service {
 
   @POST("/upload/xml")
   @NoResponse
-  public uploadXML(@XMLBody xml: Document): Call<NONE> {
+  public uploadXML(@XMLBody user: User): Call<NONE> {
     return PASS;
   }
 
