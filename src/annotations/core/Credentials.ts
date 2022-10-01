@@ -1,17 +1,38 @@
-import { MapOfHeaders } from "../utils/types";
+import { MapOfHeaders } from "../utils";
 import { Field, Model } from "./Model";
 
+/**
+ * Class that represents credentials used for sending authorized requests
+ */
 export abstract class Credentials extends Model {
+  /**
+   * Abstract method for constructing the authentication headers used in a request
+   */
   abstract buildAuthHeaders(): MapOfHeaders;
 
+  /**
+   * Method for constructing the refresh headers used in a request to retrieve new credentials
+   */
   public buildRefreshHeaders(): MapOfHeaders {
     return {};
   }
 }
 
+/**
+ * Credentials that support JWT
+ */
 export class BearerCredentials extends Credentials {
-  @Field() accessToken: string;
-  @Field() refreshToken?: string;
+  /**
+   * JWT access token use for authenticated requests
+   */
+  @Field()
+  accessToken: string;
+
+  /**
+   * JWT refresh token used to retrieve new access token
+   */
+  @Field()
+  refreshToken?: string;
 
   constructor(accessToken: string, refreshToken?: string) {
     super();
@@ -33,8 +54,15 @@ export class BearerCredentials extends Credentials {
   }
 }
 
+/**
+ * Credentials for using API service
+ */
 export class APIKeyCredentials extends Credentials {
-  @Field() apiKey: string;
+  /**
+   * API Key used for authenticated requests
+   */
+  @Field()
+  apiKey: string;
 
   constructor(apiKey: string) {
     super();
@@ -48,9 +76,21 @@ export class APIKeyCredentials extends Credentials {
   }
 }
 
+/**
+ * Credentials that is used for username and password authenticated requests
+ */
 export class BasicCredentials extends Credentials {
-  @Field() username: string;
-  @Field() password: string;
+  /**
+   * Username for the authenticated user
+   */
+  @Field()
+  username: string;
+
+  /**
+   * Password for the authenticated user
+   */
+  @Field()
+  password: string;
 
   constructor(username: string, password: string) {
     super();

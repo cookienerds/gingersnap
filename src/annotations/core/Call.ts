@@ -25,6 +25,9 @@ export interface Callable<T extends Model | Model[] | String | String[] | Blob |
   execute: (rawResponse?: boolean) => Promise<T>;
 }
 
+/**
+ * Abstract Callable class with generic processing functionalities
+ */
 export abstract class AbstractCall<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE>
   implements Callable<T>
 {
@@ -132,6 +135,10 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
    */
   private readonly executor: (v: AbortSignal) => Promise<Response>;
 
+  /**
+   * Callback function to do post-processing once network request has successfully completed
+   * @private
+   */
   private readonly callback: Function;
 
   /**
@@ -139,7 +146,17 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
    * @private
    */
   private readonly controller: AbortController;
+
+  /**
+   * Throttle configuration for the call
+   * @private
+   */
   private readonly throttle?: ThrottleByProps;
+
+  /**
+   * Checks if the callable is currently executing
+   * @private
+   */
   private executingCallback: boolean;
 
   constructor(
@@ -209,6 +226,11 @@ export class CallGroup<T extends Model | Model[] | String | String[] | Blob | Bl
    * @private
    */
   private readonly calls: Array<Callable<any>>;
+
+  /**
+   * Checks if the requests should be raced (first one that completes should be processed)
+   * @private
+   */
   private readonly race: boolean;
 
   constructor(

@@ -22,13 +22,61 @@ interface AuthInstance {
   global: boolean;
 }
 
+/**
+ * A Snap Service for managing network requests
+ */
 export class Service {
+  /**
+   * BaseUrl used by this snap service
+   * @private
+   */
   private readonly baseUrl?: string;
+
+  /**
+   * Request retry limit used by this snap service
+   * @private
+   */
   private readonly retryLimit?: number;
+
+  /**
+   * Internal properties used to construct this snap service
+   * @private
+   */
   private readonly __internal__!: ServiceInternalProps;
+
+  /**
+   * Function that handles authentication refresh
+   * @private
+   */
   private static authRefresher?: CredentialFunctorWithArg;
+
+  /**
+   * Function that handles authentication
+   * @private
+   */
   private static authenticator?: CredentialFunctor;
+
+  /**
+   * Credentials used for authenticated network requests sent by this snap service
+   * @private
+   */
   private static credentials?: Credentials;
+
+  /**
+   * Context representing ResponseData created after the network request is complete.
+   * Value varies per network request method, and is scoped to the calling method
+   * E.g.
+   * class Snap extends Service {
+   *   @GET("/data")
+   *   @JSONResponse(Data)
+   *   public getData(): Call<Data> {
+   *     // do post processing with the Data model
+   *     console.log('Data model is returned to this.context variable');
+   *     console.log(this.context);
+   *   }
+   * }
+   * @protected
+   */
   protected context: any;
 
   constructor({ baseUrl, retryLimit }: GingerSnapProps = {}) {
@@ -37,6 +85,11 @@ export class Service {
     this.__internal__ = this.__internal__ ?? { classConfig: {}, methodConfig: {} };
   }
 
+  /**
+   * Converts the given value to a JSON object
+   * @param value Any data
+   * @private
+   */
   private convertToJSON(value: any): string {
     if (value instanceof Model) {
       return value.json();
@@ -46,6 +99,10 @@ export class Service {
     return typeof value === "string" ? value : JSON.stringify(value);
   }
 
+  /**
+   * Internal method called to wrap all network request methods with actual networking functionalities
+   * @private
+   */
   private __setup__(): void {
     const hostname = this.__internal__.classConfig.baseUrl ?? this.baseUrl ?? "";
     const self = this;
@@ -204,6 +261,11 @@ export class Service {
     }, R.toPairs(this.__internal__.methodConfig));
   }
 
+  /**
+   * Retrieves the authentication headers
+   * @param auth AuthInstance
+   * @private
+   */
   private __get_auth_headers__(auth: AuthInstance): MapOfHeaders {
     const classRef = this.constructor as any as typeof Service;
     if (!auth.global && classRef.credentials) return classRef.credentials.buildAuthHeaders();
@@ -211,6 +273,11 @@ export class Service {
     return {};
   }
 
+  /**
+   * Retrieves the auth credentials, and if no valid on exists, attempt to fetch it via the authenticator/authRefresher
+   * @param auth AuthInstance
+   * @private
+   */
   private async __get_credentials__(auth: AuthInstance): Promise<Credentials | undefined> {
     let result: any;
     let credentials: Credentials;
@@ -240,6 +307,15 @@ export class Service {
     return credentials;
   }
 
+  /**
+   * Configures authentication if none exist by assigning the authenticator to the correct scope
+   * (Global -> Service, Local -> this)
+   * @param config MethodConfiguration
+   * @param methodName name of the method that should hold the authenticator
+   * @param functor authenticator
+   * @param auth AuthInstance
+   * @private
+   */
   private __setup_authentication__(
     config: MethodConfiguration,
     methodName: string,

@@ -62,15 +62,29 @@ export const ArrayField = (type: any, name?: string) => (target: any, key: strin
 
 const xmlParser = new X2JS();
 
+/**
+ * A Data de/serializer class that manages and validates data as JavaScript Objects
+ */
 export class Model {
+  /**
+   * Converts a JSON object to a Model
+   * @param data JSON Object
+   */
   public static fromJSON<T extends Model>(data: Object): T {
     return this.fromObject(data, false);
   }
 
+  /**
+   * Converts XML string to a Model
+   * @param value XML string
+   */
   public static fromXML<T extends Model>(value: string): T {
     return this.fromObject(xmlParser.xml2js(value), true);
   }
 
+  /**
+   * Converts the current model to a JSON object
+   */
   public object(): { [string: string]: any } {
     const deserialize = (value: any) => {
       if (value instanceof Model) {
@@ -94,14 +108,25 @@ export class Model {
     );
   }
 
+  /**
+   * Converts the current model to a JSON string
+   */
   public json(): string {
     return JSON.stringify(this.object());
   }
 
+  /**
+   * Converts the current model to a XML string
+   */
   public xml(): string {
     return xmlParser.js2xml(this.object());
   }
 
+  /**
+   * Constructs the model properties by traversing the inheritance tree of the current Model being instantiated
+   * @param namespace Name of the model
+   * @private
+   */
   private static buildPropTree(namespace: string): ModelInternalProps {
     let value: ModelInternalProps;
     let space = namespace;
@@ -114,6 +139,12 @@ export class Model {
     return tree;
   }
 
+  /**
+   * Constructs a model from a JSON object
+   * @param data JSON object
+   * @param xml Whether this JSON object was derived from XML (used to properly parse missing data issues)
+   * @private
+   */
   private static fromObject<T extends Model>(data: Object, xml: boolean): T {
     const model: any = new this();
     const props: ModelInternalProps = this.buildPropTree(model.constructor.name);
