@@ -6,6 +6,7 @@
     "preserveConstEnums": true,
     "sourceMap": true,
     "strict": true,
+    "declaration": true,
     "experimentalDecorators": true,
     "esModuleInterop": true,
     "emitDecoratorMetadata": true,
