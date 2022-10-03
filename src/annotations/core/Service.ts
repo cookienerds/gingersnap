@@ -12,6 +12,7 @@ import * as R from "ramda";
 import { Call } from "./Call";
 import CallExecutionError from "../../errors/CallExecutionError";
 import { Model } from "./Model";
+import { HTTPStatus, THROTTLE_DEFAULT_MS } from "../utils";
 
 type CredentialFunctorWithArg = (credentials: Credentials) => Call<Credentials> | Promise<Credentials> | Credentials;
 type CredentialFunctor = () => Call<Credentials> | Promise<Credentials> | Credentials;
@@ -231,24 +232,33 @@ export class Service {
             let fetcher: (input: RequestInfo | URL, init?: any) => Promise<Response>;
             if (typeof window === "undefined") fetcher = require("node-fetch");
             else fetcher = fetch;
+            const lookup = (retries = 0) =>
+              fetcher(url, { signal, headers, method: requestType.toString(), body }).then(async (resp) => {
+                let credentials: Credentials | undefined;
+                if (
+                  resp.status === HTTPStatus.UNAUTHORIZED &&
+                  self[key] !== auth.authenticator &&
+                  self[key] !== auth.authRefresher &&
+                  (credentials = await this.__get_credentials__(auth))
+                ) {
+                  return await fetcher(url, {
+                    signal,
+                    headers: { ...headers, ...credentials.buildAuthHeaders() },
+                    method: requestType.toString(),
+                    body,
+                  });
+                } else if (
+                  (resp.status === HTTPStatus.GATEWAY_TIMEOUT || resp.status === HTTPStatus.SERVICE_UNAVAILABLE) &&
+                  self.retryLimit &&
+                  retries < self.retryLimit
+                ) {
+                  await new Promise((resolve) => setTimeout(resolve, THROTTLE_DEFAULT_MS));
+                  return lookup(retries + 1);
+                }
+                return resp;
+              });
 
-            return await fetcher(url, { signal, headers, method: requestType.toString(), body }).then(async (resp) => {
-              let credentials: Credentials | undefined;
-              if (
-                resp.status === 401 &&
-                self[key] !== auth.authenticator &&
-                self[key] !== auth.authRefresher &&
-                (credentials = await this.__get_credentials__(auth))
-              ) {
-                return await fetcher(url, {
-                  signal,
-                  headers: { ...headers, ...credentials.buildAuthHeaders() },
-                  method: requestType.toString(),
-                  body,
-                });
-              }
-              return resp;
-            });
+            return lookup();
           },
           oldMethod,
           value.responseClass,
