@@ -3,6 +3,9 @@ import { User, UserService } from "./services/user";
 import * as R from "ramda";
 import { UtilService } from "./services/util";
 import "blob-polyfill";
+import { THROTTLE_DEFAULT_MS } from "../src";
+
+jest.setTimeout(10000);
 
 const MOCKED_USERS = [
   {
@@ -394,5 +397,32 @@ describe("Test Network Service", function () {
     const resp = await service.uploadXML(User.fromJSON(MOCKED_USERS[0])).execute();
 
     expect(resp).toBe(null);
+  });
+
+  it("should retry request on service failure", async () => {
+    let called = 0;
+    (global.fetch as any) = async (url: string, options: any) => {
+      called++;
+      if (called <= 3) {
+        return {
+          status: 503,
+          ok: false,
+        };
+      }
+      return {
+        text: async () => "check",
+        status: 200,
+        ok: true,
+      };
+    };
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(UtilService);
+    const start = performance.now();
+    const resp = await service.healthCheck().execute();
+    const end = performance.now();
+    expect(end - start).toBeGreaterThanOrEqual(THROTTLE_DEFAULT_MS * 3);
+    expect(resp.toString()).toBe("check");
+    expect(called).toBe(4);
   });
 });

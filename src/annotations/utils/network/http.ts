@@ -1,3 +1,6 @@
+/**
+ * HTTP Status codes as ENUM values
+ */
 export enum HTTPStatus {
   OFFLINE = 0,
   OK = 200,

@@ -23,6 +23,7 @@ export class User extends Model {
   @ArrayField(User) friends!: User[];
   @Field("contact_no") tel!: String;
   @Field("timestamp") createdOn!: Date;
+
   @Ignore()
   @Field()
   bestie?: User;

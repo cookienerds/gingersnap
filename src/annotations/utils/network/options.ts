@@ -3,7 +3,7 @@ import * as R from "ramda";
 import "reflect-metadata";
 
 /// //// Constants ///////
-const THROTTLE_DEFAULT_MS = 3000;
+export const THROTTLE_DEFAULT_MS = 3000;
 const SUPPORTED_HEADER_VALUES = ["String", "Number", "Boolean"];
 
 /// //// Helpers ///////
@@ -49,27 +49,56 @@ const createRequestMultiBodyParameterDecorator =
     proto.__internal__ = R.over(lens, changer, proto.__internal__);
   };
 
-/// //// Class Decorators ///////
+/**
+ * Sets the host for the Snap Service
+ * @param value host
+ * @constructor
+ */
 export const BaseUrl = (value: string) => (constructor: any) => {
   const proto = createProps(constructor);
   proto.__internal__.classConfig.baseUrl = value;
 };
 
-/// //// Method Decorators ///////
+/**
+ * Marks the SnapService method as on that returns a JSON Response of a specific Model type
+ */
 export const JSONResponse = createResponseDecorator(ResponseType.JSON);
 
+/**
+ * Marks the SnapService method as on that returns a XML Response of a specific Model type
+ */
 export const XMLResponse = createResponseDecorator(ResponseType.XML);
 
+/**
+ * Marks the SnapService method as on that returns a String Response
+ */
 export const StringResponse = createResponseDecorator(ResponseType.STRING)(String);
 
+/**
+ * Marks the SnapService method as on that returns a Blob
+ */
 export const BinaryResponse = createResponseDecorator(ResponseType.BINARY)(Blob);
 
+/**
+ * Marks the SnapService method as on that has no return value
+ */
 export const NoResponse = createResponseDecorator(ResponseType.NONE)();
 
+/**
+ * Marks the SnapService method that it should use multipart/form-data when submitting the request
+ */
 export const Multipart = createRequestMultiBodyDecorator(BodyType.MULTIPART);
 
+/**
+ * Marks the SnapService method that it should use application/x-www-form-urlencoded when submitting the request
+ */
 export const FormUrlEncoded = createRequestMultiBodyDecorator(BodyType.FORMURLENCODED);
 
+/**
+ * Sets the headers for the request
+ * @param value MapOfHeaders
+ * @constructor
+ */
 export const Headers = (value: MapOfHeaders) => (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "headers"]);
@@ -77,18 +106,37 @@ export const Headers = (value: MapOfHeaders) => (target: any, propertyKey: strin
   proto.__internal__ = R.over(lens, changer, proto.__internal__);
 };
 
+/**
+ * Throttles the request by 3 seconds
+ * @param target
+ * @param propertyKey
+ * @constructor
+ */
 export const Throttle = (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "throttle"]);
   proto.__internal__ = R.set(lens, { waitPeriodInMs: THROTTLE_DEFAULT_MS }, proto.__internal__);
 };
 
+/**
+ * Throttles the request by the value provided
+ * @param value ThrottleByProps - An object that contains the waitPeriodInMs
+ * @constructor
+ */
 export const ThrottleBy = (value: ThrottleByProps) => (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "throttle"]);
   proto.__internal__ = R.set(lens, value, proto.__internal__);
 };
 
+/**
+ * Marks this method as an authenticator. When requests receive 401 status code, this method will be called to retrieve
+ * the credentials
+ * @param type Credentials - Type of credentials that this authenticator should return
+ * (BasicCredentials | BearerCredentials | APIKeyCredentials | define one of your own by subclassing Credentials)
+ * @param global Whether this authenticator should be used across all services
+ * @constructor
+ */
 export const Authenticator =
   <T>(type: T, global = false) =>
   (target: any, propertyKey: string) => {
@@ -97,6 +145,14 @@ export const Authenticator =
     proto.__internal__ = R.set(lens, { type, global }, proto.__internal__);
   };
 
+/**
+ * Marks this method as an auth refresher. Whenever a request receives a 401 status code for invalid credentials, this
+ * method will be called with the old Credentials, and should produce new credentials
+ * @param type Credentials - Type of credentials that this authenticator should return
+ * (BasicCredentials | BearerCredentials | APIKeyCredentials | define one of your own by subclassing Credentials)
+ * @param global Whether this auth refresher should be used across all services
+ * @constructor
+ */
 export const AuthRefresher =
   <T>(type: T, global = false) =>
   (target: any, propertyKey: string) => {
@@ -105,17 +161,36 @@ export const AuthRefresher =
     proto.__internal__ = R.set(lens, { type, global }, proto.__internal__);
   };
 
-/// //// Parameter Decorators ///////
+/**
+ * Marks argument as a property in the MultiPart form
+ */
 export const Part = createRequestMultiBodyParameterDecorator("parts");
 
+/**
+ * Marks argument as a property in the FormUrlEncoded  form
+ */
 export const Field = createRequestMultiBodyParameterDecorator("fields");
 
+/**
+ * Marks argument that should be deserialized to a JSON string and attached as the body of the request
+ */
 export const JSONBody = createRequestBodyDecorator(BodyType.JSON);
 
+/**
+ * Marks argument that should be deserialized to XML string and attached as the body of the request
+ */
 export const XMLBody = createRequestBodyDecorator(BodyType.XML);
 
+/**
+ * Marks argument that should be the body of the request, and is a string
+ */
 export const StringBody = createRequestBodyDecorator(BodyType.STRING);
 
+/**
+ * Marks argument that should contain a Map of the queries used in the request. Argument should be an object with each
+ * key value pair being the query name and value
+ * @constructor
+ */
 export const QueryMap = (target: any, propertyKey: string, parameterIndex: number) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "queries"]);
@@ -126,6 +201,11 @@ export const QueryMap = (target: any, propertyKey: string, parameterIndex: numbe
   );
 };
 
+/**
+ * Marks argument as a path variable in the request url
+ * @param value Name of the path variable
+ * @constructor
+ */
 export const Path = (value: string) => {
   return (target: any, propertyKey: string, parameterIndex: number) => {
     const type: string = R.path(
@@ -145,6 +225,11 @@ export const Path = (value: string) => {
   };
 };
 
+/**
+ * Marks argument as a query to be attached to the request url
+ * @param value Name of the query
+ * @constructor
+ */
 export const Query = (value: string) => {
   return (target: any, propertyKey: string, parameterIndex: number) => {
     const type: string = R.path(
@@ -164,6 +249,11 @@ export const Query = (value: string) => {
   };
 };
 
+/**
+ * Marks argument as a header to be attached to the request
+ * @param value Name of the header
+ * @constructor
+ */
 export const Header = (value: string) => {
   return (target: any, propertyKey: string, parameterIndex: number) => {
     const type: string = R.path(
@@ -183,6 +273,11 @@ export const Header = (value: string) => {
   };
 };
 
+/**
+ * Marks argument that should contain a Map of the headers used in the request. Argument should be an object with each
+ * key value pair being the header name and value
+ * @constructor
+ */
 export const HeaderMap = (target: any, propertyKey: string, parameterIndex: number) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "parameters", "headers"]);

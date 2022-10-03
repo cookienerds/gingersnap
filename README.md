@@ -17,7 +17,6 @@ To use as an NPM package in a project:
 For support, please contact <a href="mailto:dev@cookienerds.com">dev@cookienerds.com</a>
 
 ## Roadmap
-- Support request retry on status 503
 - Support request timeout
 - Opt out of using an authenticator for a method's request
 - Support multiple authenticators, and setting Primary authenticator

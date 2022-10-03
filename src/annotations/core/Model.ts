@@ -24,6 +24,12 @@ interface ModelInternalProps {
 
 const namespacedModelInternalProps: { [string: string]: ModelInternalProps } = {};
 
+/**
+ * Ignores the annotated field during serilization (by default) and/or deserialization
+ * @param value an object for enabling/disabling which directions should ignore be used
+ * { serialize: boolean, deserialize: boolean }
+ * @constructor
+ */
 export const Ignore =
   (value: IgnoreProps = { serialize: true, deserialize: false }) =>
   (target: any, key: string) => {
@@ -38,6 +44,12 @@ export const Ignore =
     throw new Error(`No field found that matches ${key}`);
   };
 
+/**
+ * A property that exist in the incoming data
+ * @param name Name of the property in the incoming data. If not provided, the variable name will be assumed as the
+ * property name
+ * @constructor
+ */
 export const Field = (name?: string) => (target: any, key: string) => {
   const props: ModelInternalProps = namespacedModelInternalProps[target.constructor.name] ?? { fields: {} };
   props.fields[name ?? key] = {
@@ -49,6 +61,13 @@ export const Field = (name?: string) => (target: any, key: string) => {
   namespacedModelInternalProps[target.constructor.name] = props;
 };
 
+/**
+ * A property that exists on the incoming data, that contains an array of same data types
+ * @param type Type of data in the array
+ * @param name Name of the property in the incoming data. If not provided, the variable name will be assumed as the
+ * property name
+ * @constructor
+ */
 export const ArrayField = (type: any, name?: string) => (target: any, key: string) => {
   const props: ModelInternalProps = namespacedModelInternalProps[target.constructor.name] ?? { fields: {} };
   props.fields[name ?? key] = {
