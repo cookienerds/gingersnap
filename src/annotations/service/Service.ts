@@ -1,18 +1,11 @@
-import { GingerSnapProps } from "./index";
-import { Credentials } from "./Credentials";
-import {
-  BodyType,
-  MapOfHeaders,
-  MethodConfiguration,
-  RequestType,
-  ResponseType,
-  ServiceInternalProps,
-} from "../utils/types";
+import { Credentials } from "../Credentials";
+import { BodyType, MapOfHeaders, MethodConfiguration, RequestType, ResponseType, ServiceInternalProps } from "./types";
 import * as R from "ramda";
-import { Call } from "./Call";
+import { Call } from "../Call";
 import CallExecutionError from "../../errors/CallExecutionError";
-import { Model } from "./Model";
-import { HTTPStatus, THROTTLE_DEFAULT_MS } from "../utils";
+import { Model } from "../model/Model";
+import { GingerSnapProps } from "../index";
+import { HTTPStatus, THROTTLE_DEFAULT_MS } from "./network";
 
 type CredentialFunctorWithArg = (credentials: Credentials) => Call<Credentials> | Promise<Credentials> | Credentials;
 type CredentialFunctor = () => Call<Credentials> | Promise<Credentials> | Credentials;
@@ -207,7 +200,14 @@ export class Service {
                         throw new CallExecutionError(`form field is missing at index ${index}`);
                       }
                       formData.set(key, arg);
-                    }, R.toPairs(value.parameters.body.fields));
+                    }, R.toPairs(value.parameters.body.fields ?? {}));
+
+                    R.forEach(([key, index]: [string, number]) => {
+                      const arg = args[index];
+                      if (arg !== undefined && arg !== null) {
+                        formData.set(key, arg);
+                      }
+                    }, R.toPairs(value.parameters.body.optionalFields ?? {}));
                     body = formData;
                     break;
                   }
@@ -220,7 +220,7 @@ export class Service {
                         throw new CallExecutionError(`form part is missing at index ${index}`);
                       }
                       formData.append(key, arg);
-                    }, R.toPairs(value.parameters.body.parts));
+                    }, R.toPairs(value.parameters.body.parts ?? {}));
                     body = formData;
                     break;
                   }

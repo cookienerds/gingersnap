@@ -1,5 +1,5 @@
-import { MapOfHeaders } from "../utils";
-import { Field, Model } from "./Model";
+import { Field, Model } from "./model/Model";
+import { MapOfHeaders } from "./service";
 
 /**
  * Class that represents credentials used for sending authorized requests

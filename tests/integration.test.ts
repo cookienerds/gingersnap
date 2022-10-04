@@ -1,9 +1,10 @@
-import { GingerSnap } from "../src/annotations/core";
+import { GingerSnap } from "../src";
 import { User, UserService } from "./services/user";
 import * as R from "ramda";
 import { UtilService } from "./services/util";
 import "blob-polyfill";
-import { THROTTLE_DEFAULT_MS } from "../src";
+import { AuthService } from "./services/auth";
+import { THROTTLE_DEFAULT_MS } from "../src/annotations/service";
 
 jest.setTimeout(10000);
 
@@ -424,5 +425,19 @@ describe("Test Network Service", function () {
     expect(end - start).toBeGreaterThanOrEqual(THROTTLE_DEFAULT_MS * 3);
     expect(resp.toString()).toBe("check");
     expect(called).toBe(4);
+  });
+
+  it("should login with optional field", async () => {
+    (global.fetch as any) = async (url: string, options: any) => ({
+      json: async () => ({ accessToken: "jwt", refreshToken: "jwt-refresh" }),
+      status: 200,
+      ok: true,
+    });
+
+    const snap = new GingerSnap({ baseUrl: "https://test.com" });
+    const service = snap.create(AuthService);
+    const resp = await service.loginWithEmailAndPassword("test@test.com").execute();
+    expect(resp.accessToken.toString()).toBe("jwt");
+    expect(resp.refreshToken?.toString()).toBe("jwt-refresh");
   });
 });

@@ -1,4 +1,3 @@
-import { Service } from "../../src/annotations/core/Service";
 import {
   Authenticator,
   AuthRefresher,
@@ -6,11 +5,12 @@ import {
   FormUrlEncoded,
   JSONBody,
   JSONResponse,
-} from "../../src/annotations/utils/network/options";
-import { BearerCredentials } from "../../src/annotations/core/Credentials";
-import { PASS } from "../../src/annotations/utils/types";
-import { Call } from "../../src/annotations/core/Call";
-import { POST } from "../../src/annotations/utils/network/requests";
+  OptionalField,
+  PASS,
+  POST,
+  Service,
+} from "../../src/annotations/service";
+import { BearerCredentials, Call } from "../../src";
 
 export class AuthService extends Service {
   @POST("api/v1/auth/login")
@@ -19,7 +19,7 @@ export class AuthService extends Service {
   @Authenticator(BearerCredentials, true)
   public loginWithEmailAndPassword(
     @Field("email") email: string,
-    @Field("password") password: string
+    @OptionalField("password") password?: string
   ): Call<BearerCredentials> {
     return PASS;
   }

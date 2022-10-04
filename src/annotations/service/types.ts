@@ -1,4 +1,4 @@
-import { Credentials } from "../core/Credentials";
+import { Credentials } from "../Credentials";
 
 export enum RequestType {
   GET = "GET",
@@ -39,7 +39,8 @@ interface MultiPartBodyProps extends BodyProps<BodyType.MULTIPART> {
 }
 
 interface FormURLEncodedBodyProps extends BodyProps<BodyType.FORMURLENCODED> {
-  fields: { [string: string]: number };
+  fields?: { [string: string]: number };
+  optionalFields?: { [string: string]: number };
 }
 
 interface StringBodyProps extends BodyProps<BodyType.STRING> {
