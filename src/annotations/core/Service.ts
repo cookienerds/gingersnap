@@ -229,9 +229,7 @@ export class Service {
                 }
               }
             }
-            let fetcher: (input: RequestInfo | URL, init?: any) => Promise<Response>;
-            if (typeof window === "undefined") fetcher = require("node-fetch");
-            else fetcher = fetch;
+            const fetcher: (input: RequestInfo | URL, init?: any) => Promise<Response> = fetch;
             const lookup = (retries = 0) =>
               fetcher(url, { signal, headers, method: requestType.toString(), body }).then(async (resp) => {
                 let credentials: Credentials | undefined;
