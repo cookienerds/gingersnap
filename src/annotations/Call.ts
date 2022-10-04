@@ -1,7 +1,7 @@
-import { NONE, ResponseType, ThrottleByProps } from "../utils/types";
-import CallExecutionError from "../../errors/CallExecutionError";
-import { Model } from "./Model";
-import MissingArgumentsError from "../../errors/MissingArgumentsError";
+import { NONE, ResponseType, ThrottleByProps } from "./service/types";
+import CallExecutionError from "../errors/CallExecutionError";
+import { Model } from "./model/Model";
+import MissingArgumentsError from "../errors/MissingArgumentsError";
 import * as R from "ramda";
 
 /**

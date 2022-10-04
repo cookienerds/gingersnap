@@ -1,7 +1,8 @@
-import { Service } from "../../src/annotations/core/Service";
-import { GET, POST } from "../../src/annotations/utils/network/requests";
-import { Call } from "../../src/annotations/core/Call";
+import { Call, BasicCredentials } from "../../src";
 import {
+  GET,
+  POST,
+  Service,
   Authenticator,
   AuthRefresher,
   BaseUrl,
@@ -16,9 +17,9 @@ import {
   StringBody,
   StringResponse,
   XMLBody,
-} from "../../src/annotations/utils/network/options";
-import { NONE, PASS } from "../../src/annotations/utils/types";
-import { BasicCredentials } from "../../src/annotations/core/Credentials";
+  NONE,
+  PASS,
+} from "../../src/annotations/service";
 import { User } from "./user";
 
 @BaseUrl("https://test.com")

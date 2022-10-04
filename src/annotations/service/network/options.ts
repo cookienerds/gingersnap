@@ -172,6 +172,11 @@ export const Part = createRequestMultiBodyParameterDecorator("parts");
 export const Field = createRequestMultiBodyParameterDecorator("fields");
 
 /**
+ * Marks argument as a property in the FormUrlEncoded  form, but it can be missing
+ */
+export const OptionalField = createRequestMultiBodyParameterDecorator("OptionalFields");
+
+/**
  * Marks argument that should be deserialized to a JSON string and attached as the body of the request
  */
 export const JSONBody = createRequestBodyDecorator(BodyType.JSON);

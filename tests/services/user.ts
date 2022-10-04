@@ -1,6 +1,4 @@
-import { Service } from "../../src/annotations/core/Service";
-import { DELETE, GET, POST, PUT } from "../../src/annotations/utils/network/requests";
-import { Call } from "../../src/annotations/core/Call";
+import { Call } from "../../src";
 import {
   Path,
   Headers,
@@ -9,13 +7,18 @@ import {
   QueryMap,
   JSONResponse,
   XMLResponse,
+  DELETE,
+  GET,
+  POST,
+  PUT,
+  Service,
   HeaderMap,
   Throttle,
   ThrottleBy,
   JSONBody,
-} from "../../src/annotations/utils/network/options";
-import { ArrayField, Field, Ignore, Model } from "../../src/annotations/core/Model";
-import { PASS } from "../../src/annotations/utils/types";
+  PASS,
+} from "../../src/annotations/service";
+import { ArrayField, Field, Ignore, Model } from "../../src/annotations/model";
 import "reflect-metadata";
 
 export class User extends Model {
