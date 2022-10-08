@@ -5,6 +5,13 @@ import { UtilService } from "./services/util";
 import "blob-polyfill";
 import { AuthService } from "./services/auth";
 import { THROTTLE_DEFAULT_MS } from "../src/annotations/service";
+import {
+  createModelClassAnnotationTag,
+  createModelFieldAnnotationTag,
+  getModelClassAnnotationTagProperties,
+  getModelFieldAnnotationTagProperties,
+} from "../src/utils/plugin";
+import { Field, Model } from "../src/annotations/model";
 
 jest.setTimeout(10000);
 
@@ -439,5 +446,47 @@ describe("Test Network Service", function () {
     const resp = await service.loginWithEmailAndPassword("test@test.com").execute();
     expect(resp.accessToken.toString()).toBe("jwt");
     expect(resp.refreshToken?.toString()).toBe("jwt-refresh");
+  });
+
+  it("should create model class/field plugins", () => {
+    let called = false;
+    const CustomTag = createModelClassAnnotationTag("CustomTag", { test: true });
+    const CustomFieldTag = createModelFieldAnnotationTag(
+      "CustomFieldTag",
+      { test2: true },
+      (tagName: string, properties: Object, target: Model, fieldName: string) => {
+        called = true;
+        expect(tagName).toEqual("CustomFieldTag");
+        expect(properties).toEqual({ test2: true });
+        expect(fieldName).toEqual("test");
+        expect((target as any).test.toString()).toEqual("custom test");
+      }
+    );
+
+    @CustomTag
+    class Test extends Model {
+      @CustomFieldTag
+      @Field()
+      test!: String;
+    }
+
+    const properties = getModelClassAnnotationTagProperties(["CustomTag"], Test);
+    expect(R.dissocPath([0, "modelClass"], properties)).toEqual([
+      { properties: { test: true }, modelClassName: "Test" },
+    ]);
+
+    const model = Test.fromJSON({ test: "custom test" });
+    expect(model).toBeDefined();
+    expect(called).toBeTruthy();
+    const fieldProperties = getModelFieldAnnotationTagProperties(["CustomFieldTag"], Test);
+    expect(fieldProperties).toEqual([
+      {
+        Type: String,
+        fieldName: "test",
+        isArray: false,
+        tagName: "CustomFieldTag",
+        tagProperties: { test2: true },
+      },
+    ]);
   });
 });

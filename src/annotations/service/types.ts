@@ -71,6 +71,10 @@ export interface MethodConfiguration {
   responseClass?: any;
   responseArray?: boolean;
   throttle?: ThrottleByProps;
+  customTags?: Array<{
+    name: string;
+    [string: string]: any;
+  }>;
   parameters?: {
     body?: MultiPartBodyProps | FormURLEncodedBodyProps | StringBodyProps | JSONBodyProps | XMLBodyProps;
     headers?: MapOfHeaders;

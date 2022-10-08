@@ -13,19 +13,25 @@ interface FieldProps {
   name: string;
   Type: any;
   isArray: boolean;
+  customTags?: {
+    [string: string]: {
+      properties: Object;
+      __callback__?: (name: string, properties: Object, target: Model, fieldName: string) => void;
+    };
+  };
 }
 
-interface ModelInternalProps {
+export interface ModelInternalProps {
   fields: {
     [string: string]: FieldProps;
   };
   parent?: string;
 }
 
-const namespacedModelInternalProps: { [string: string]: ModelInternalProps } = {};
+export const namespacedModelInternalProps: { [string: string]: ModelInternalProps } = {};
 
 /**
- * Ignores the annotated field during serilization (by default) and/or deserialization
+ * Ignores the annotated field during serialization (by default) and/or deserialization
  * @param value an object for enabling/disabling which directions should ignore be used
  * { serialize: boolean, deserialize: boolean }
  * @constructor
@@ -202,6 +208,10 @@ export class Model {
       } else {
         model[fieldProps.name] = new fieldProps.Type(value);
       }
+
+      R.forEach(([k, v]) => {
+        if (v.__callback__) v.__callback__(k, v.properties, model, fieldProps.name);
+      }, R.toPairs(fieldProps.customTags ?? {}));
     }, R.toPairs(props.fields));
 
     return model as T;

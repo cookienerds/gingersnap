@@ -26,7 +26,7 @@ For support, please contact <a href="mailto:dev@cookienerds.com">dev@cookienerds
 - Support default response when offline
 - Support grouping requests, if one fail cancel all
 - Support race requests, the first one that finishes/fails cancel all others and return the response
-- Plugin support
+- Plugin support for services
 - Support for NodeJs
 - Push message support via subscribers
 - Websocket support via subscribers, and methods for sending messages
