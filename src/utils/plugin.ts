@@ -17,6 +17,11 @@ export interface ModelTagPropertyDescription {
 
 const modelClassTags: { [string: string]: ModelTagPropertyDescription } = {};
 
+/**
+ * Creates a custom class tag
+ * @param name Name of the tag
+ * @param properties any properties that should be saved
+ */
 export const createModelClassAnnotationTag =
   (name: string, properties: Object = {}) =>
   (constructor: any) => {
@@ -27,6 +32,11 @@ export const createModelClassAnnotationTag =
     };
   };
 
+/**
+ * Retrieves a list of properties set by one or more custom class tags
+ * @param tagNames Array<string>
+ * @param ModelClass Class<Model>
+ */
 export const getModelClassAnnotationTagProperties = (
   tagNames: string[],
   ModelClass: any
@@ -34,6 +44,12 @@ export const getModelClassAnnotationTagProperties = (
   return R.map((tag) => modelClassTags[tag], tagNames).filter((v) => v);
 };
 
+/**
+ * Creates a custom field tag
+ * @param name Name of the tag
+ * @param properties any properties that should be saved
+ * @param onFieldCreated callback executed once property exist on a model (Optional)
+ */
 export const createModelFieldAnnotationTag =
   (
     name: string,
@@ -58,6 +74,11 @@ export const createModelFieldAnnotationTag =
     namespacedModelInternalProps[target.constructor.name] = props;
   };
 
+/**
+ *  Retrieves a list of properties set by one or more custom field tags
+ * @param tagNames Array<String>
+ * @param ModelClass Class<Model>
+ */
 export const getModelFieldAnnotationTagProperties = (
   tagNames: string[],
   ModelClass: any
