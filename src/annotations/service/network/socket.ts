@@ -1,7 +1,7 @@
 import { createProps } from "./options";
 import * as R from "ramda";
 
-const ReadStream =
+export const ReadStream =
   (keyPath: string | Array<string | number>, value: string | RegExp) => (target: any, propertyKey: string) => {
     const proto = createProps(target.constructor);
     const typeLens = R.lensPath(["methodConfig", propertyKey, "socketReadStream"]);
@@ -17,7 +17,7 @@ const ReadStream =
     );
   };
 
-const WriteStream = (target: any, propertyKey: string) => {
+export const WriteStream = (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const typeLens = R.lensPath(["methodConfig", propertyKey, "socketWriteStream"]);
   proto.__internal__ = R.set(typeLens, true, proto.__internal__);
