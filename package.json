@@ -1,6 +1,6 @@
 {
   "name": "@cookienerds/gingersnap",
-  "version": "1.0.7",
+  "version": "beta-1.3.0",
   "description": "framework for handling network requests",
   "main": "index.js",
   "scripts": {
@@ -54,11 +54,17 @@
     "node-fetch": "^3.2.10",
     "ramda": "^0.28.0",
     "reflect-metadata": "^0.1.13",
+    "uuid": "^9.0.0",
     "x2js": "^3.4.3"
   },
   "jest": {
     "testEnvironment": "jsdom",
-    "coverageReporters": ["html", "text", "text-summary", "cobertura"],
+    "coverageReporters": [
+      "html",
+      "text",
+      "text-summary",
+      "cobertura"
+    ],
     "transform": {
       "^.+\\.ts$": "ts-jest",
       "^.+\\.js$": "babel-jest"

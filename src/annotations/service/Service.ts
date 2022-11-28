@@ -24,7 +24,7 @@ export class Service {
    * BaseUrl used by this snap service
    * @private
    */
-  private readonly baseUrl?: string;
+  protected readonly baseUrl: string;
 
   /**
    * Request retry limit used by this snap service
@@ -74,9 +74,9 @@ export class Service {
   protected context: any;
 
   constructor({ baseUrl, retryLimit }: GingerSnapProps = {}) {
-    this.baseUrl = baseUrl;
     this.retryLimit = retryLimit;
     this.__internal__ = this.__internal__ ?? { classConfig: {}, methodConfig: {} };
+    this.baseUrl = this.__internal__.classConfig.baseUrl ?? baseUrl ?? "";
   }
 
   /**
@@ -97,8 +97,8 @@ export class Service {
    * Internal method called to wrap all network request methods with actual networking functionalities
    * @private
    */
-  private __setup__(): void {
-    const hostname = this.__internal__.classConfig.baseUrl ?? this.baseUrl ?? "";
+  protected __setup__(): void {
+    const hostname = this.baseUrl;
     const self = this;
     R.forEach(([key, value]) => {
       let headers = value.headers ?? {};
@@ -114,121 +114,17 @@ export class Service {
       const requestType: RequestType = value.requestType;
 
       self[key] = (...args: any[]) => {
-        let body: any;
-        const url = new URL(
+        let url = new URL(
           (hostname.endsWith("/") ? hostname.substring(0, hostname.length) : hostname) +
             (apiPath.startsWith("/") ? apiPath : "/" + apiPath)
         );
         return new Call(
           async (signal) => {
             headers = { ...headers, ...this.__get_auth_headers__(auth) };
-            if (value.parameters) {
-              const paramHeaders = value.parameters.headers ?? {};
-              const paramQueries = value.parameters.queries ?? {};
-              const paramHeaderPairs: any = R.concat(
-                R.toPairs(paramHeaders),
-                R.map((k) => [k, (paramHeaders as any)[k]], Object.getOwnPropertySymbols(paramHeaders))
-              );
-              const paramQueryPairs: any = R.concat(
-                R.toPairs(paramQueries),
-                R.map((k) => [k, (paramQueries as any)[k]], Object.getOwnPropertySymbols(paramQueries))
-              );
-
-              R.forEach(([key, index]: [any, number]) => {
-                const arg: any = args[index];
-                if (arg === undefined) {
-                  throw new CallExecutionError(`header parameter is missing at index ${index}`);
-                }
-                if (typeof key === "symbol" && typeof arg === "object") {
-                  headers = { ...headers, ...arg };
-                } else {
-                  headers[key] = headers[key] ? `${R.prop(key, headers)};${String(args[index])}` : String(args[index]);
-                }
-              }, paramHeaderPairs);
-
-              R.forEach(([key, index]: [any, number]) => {
-                if (args[index] === undefined) {
-                  throw new CallExecutionError(`path parameter is missing at index ${index}`);
-                }
-                url.pathname = url.pathname.replace(encodeURI(`{${key}}`), encodeURI(args[index]));
-              }, R.toPairs(value.parameters.pathVariables ?? {}));
-
-              R.forEach(([key, index]: [any, number]) => {
-                const arg = args[index];
-                if (arg === undefined) {
-                  throw new CallExecutionError(`query parameter is missing at index ${index}`);
-                }
-                if (typeof key === "symbol" && typeof arg === "object") {
-                  R.forEach(([k, v]: [string, string]) => {
-                    url.searchParams.set(k, v);
-                  }, R.toPairs(arg));
-                } else {
-                  url.searchParams.set(key, arg);
-                }
-              }, paramQueryPairs);
-
-              if (value.parameters.body?.type) {
-                switch (value.parameters.body.type) {
-                  case BodyType.JSON:
-                  case BodyType.STRING: {
-                    if (value.parameters.body.type === BodyType.JSON) {
-                      headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
-                    }
-                    const index = value.parameters.body.parameterIndex;
-                    if (args[index] === undefined) {
-                      throw new CallExecutionError(`body parameter is missing at index ${index}`);
-                    }
-                    body = this.convertToJSON(args[index]);
-                    break;
-                  }
-                  case BodyType.XML: {
-                    const index = value.parameters.body.parameterIndex;
-                    const arg = args[index];
-                    if (arg === undefined) {
-                      throw new CallExecutionError(`body parameter is missing at index ${index}`);
-                    }
-
-                    body = arg instanceof Model ? arg.xml() : new XMLSerializer().serializeToString(arg);
-                    break;
-                  }
-                  case BodyType.FORMURLENCODED: {
-                    headers["Content-Type"] = headers["Content-Type"] ?? "application/x-www-form-urlencoded";
-                    const formData = new URLSearchParams();
-                    R.forEach(([key, index]: [string, number]) => {
-                      const arg = args[index];
-                      if (arg === undefined) {
-                        throw new CallExecutionError(`form field is missing at index ${index}`);
-                      }
-                      formData.set(key, arg);
-                    }, R.toPairs(value.parameters.body.fields ?? {}));
-
-                    R.forEach(([key, index]: [string, number]) => {
-                      const arg = args[index];
-                      if (arg !== undefined && arg !== null) {
-                        formData.set(key, arg);
-                      }
-                    }, R.toPairs(value.parameters.body.optionalFields ?? {}));
-                    body = formData;
-                    break;
-                  }
-                  case BodyType.MULTIPART: {
-                    headers["Content-Type"] = headers["Content-Type"] ?? "multipart/form-data";
-                    const formData = new FormData();
-                    R.forEach(([key, index]: [string, number]) => {
-                      const arg = args[index];
-                      if (arg === undefined) {
-                        throw new CallExecutionError(`form part is missing at index ${index}`);
-                      }
-                      formData.append(key, arg);
-                    }, R.toPairs(value.parameters.body.parts ?? {}));
-                    body = formData;
-                    break;
-                  }
-                  default:
-                    throw new CallExecutionError(`Unsupported body type: ${(value.parameters.body as any)?.type}`);
-                }
-              }
-            }
+            const result = this.__constructor_call_args__(url, headers, value, args);
+            headers = result.headers;
+            url = result.url;
+            const body = result.body;
             const fetcher: (input: RequestInfo | URL, init?: any) => Promise<Response> = fetch;
             const lookup = (retries = 0) =>
               fetcher(url, { signal, headers, method: requestType.toString(), body }).then(async (resp) => {
@@ -267,6 +163,118 @@ export class Service {
       };
       this.__setup_authentication__(value, key, self[key], auth);
     }, R.toPairs(this.__internal__.methodConfig));
+  }
+
+  private __constructor_call_args__(url: URL, headers: MapOfHeaders, value: MethodConfiguration, args: any[]) {
+    let body: any;
+    if (value.parameters) {
+      const paramHeaders = value.parameters.headers ?? {};
+      const paramQueries = value.parameters.queries ?? {};
+      const paramHeaderPairs: any = R.concat(
+        R.toPairs(paramHeaders),
+        R.map((k) => [k, (paramHeaders as any)[k]], Object.getOwnPropertySymbols(paramHeaders))
+      );
+      const paramQueryPairs: any = R.concat(
+        R.toPairs(paramQueries),
+        R.map((k) => [k, (paramQueries as any)[k]], Object.getOwnPropertySymbols(paramQueries))
+      );
+
+      R.forEach(([key, index]: [any, number]) => {
+        const arg: any = args[index];
+        if (arg === undefined) {
+          throw new CallExecutionError(`header parameter is missing at index ${index}`);
+        }
+        if (typeof key === "symbol" && typeof arg === "object") {
+          headers = { ...headers, ...arg };
+        } else {
+          headers[key] = headers[key] ? `${R.prop(key, headers)};${String(args[index])}` : String(args[index]);
+        }
+      }, paramHeaderPairs);
+
+      R.forEach(([key, index]: [any, number]) => {
+        if (args[index] === undefined) {
+          throw new CallExecutionError(`path parameter is missing at index ${index}`);
+        }
+        url.pathname = url.pathname.replace(encodeURI(`{${key}}`), encodeURI(args[index]));
+      }, R.toPairs(value.parameters.pathVariables ?? {}));
+
+      R.forEach(([key, index]: [any, number]) => {
+        const arg = args[index];
+        if (arg === undefined) {
+          throw new CallExecutionError(`query parameter is missing at index ${index}`);
+        }
+        if (typeof key === "symbol" && typeof arg === "object") {
+          R.forEach(([k, v]: [string, string]) => {
+            url.searchParams.set(k, v);
+          }, R.toPairs(arg));
+        } else {
+          url.searchParams.set(key, arg);
+        }
+      }, paramQueryPairs);
+
+      if (value.parameters.body?.type) {
+        switch (value.parameters.body.type) {
+          case BodyType.JSON:
+          case BodyType.STRING: {
+            if (value.parameters.body.type === BodyType.JSON) {
+              headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+            }
+            const index = value.parameters.body.parameterIndex;
+            if (args[index] === undefined) {
+              throw new CallExecutionError(`body parameter is missing at index ${index}`);
+            }
+            body = this.convertToJSON(args[index]);
+            break;
+          }
+          case BodyType.XML: {
+            const index = value.parameters.body.parameterIndex;
+            const arg = args[index];
+            if (arg === undefined) {
+              throw new CallExecutionError(`body parameter is missing at index ${index}`);
+            }
+
+            body = arg instanceof Model ? arg.xml() : new XMLSerializer().serializeToString(arg);
+            break;
+          }
+          case BodyType.FORMURLENCODED: {
+            headers["Content-Type"] = headers["Content-Type"] ?? "application/x-www-form-urlencoded";
+            const formData = new URLSearchParams();
+            R.forEach(([key, index]: [string, number]) => {
+              const arg = args[index];
+              if (arg === undefined) {
+                throw new CallExecutionError(`form field is missing at index ${index}`);
+              }
+              formData.set(key, arg);
+            }, R.toPairs(value.parameters.body.fields ?? {}));
+
+            R.forEach(([key, index]: [string, number]) => {
+              const arg = args[index];
+              if (arg !== undefined && arg !== null) {
+                formData.set(key, arg);
+              }
+            }, R.toPairs(value.parameters.body.optionalFields ?? {}));
+            body = formData;
+            break;
+          }
+          case BodyType.MULTIPART: {
+            headers["Content-Type"] = headers["Content-Type"] ?? "multipart/form-data";
+            const formData = new FormData();
+            R.forEach(([key, index]: [string, number]) => {
+              const arg = args[index];
+              if (arg === undefined) {
+                throw new CallExecutionError(`form part is missing at index ${index}`);
+              }
+              formData.append(key, arg);
+            }, R.toPairs(value.parameters.body.parts ?? {}));
+            body = formData;
+            break;
+          }
+          default:
+            throw new CallExecutionError(`Unsupported body type: ${(value.parameters.body as any)?.type}`);
+        }
+      }
+    }
+    return { body, headers, url };
   }
 
   /**

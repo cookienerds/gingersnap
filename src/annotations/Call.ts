@@ -133,13 +133,13 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
    * and return Response object upon completion
    * @private
    */
-  private readonly executor: (v: AbortSignal) => Promise<Response>;
+  protected readonly executor: (v: AbortSignal) => Promise<Response>;
 
   /**
    * Callback function to do post-processing once network request has successfully completed
    * @private
    */
-  private readonly callback: Function;
+  protected readonly callback: Function;
 
   /**
    * AbortController used to cancel http request created by the callback
@@ -151,7 +151,7 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
    * Throttle configuration for the call
    * @private
    */
-  private readonly throttle?: ThrottleByProps;
+  protected readonly throttle?: ThrottleByProps;
 
   /**
    * Checks if the callable is currently executing

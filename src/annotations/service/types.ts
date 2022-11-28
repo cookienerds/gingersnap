@@ -10,6 +10,12 @@ export enum RequestType {
   HEAD = "HEAD",
 }
 
+export enum ReplyStreamDirection {
+  TO = "TO",
+  FROM = "FROM",
+  BI_DIRECTIONAL = "BI_DIRECTIONAL",
+}
+
 export enum ResponseType {
   STRING = 1,
   XML,
@@ -71,6 +77,13 @@ export interface MethodConfiguration {
   responseClass?: any;
   responseArray?: boolean;
   throttle?: ThrottleByProps;
+  socketReadStream?: {
+    value: string | RegExp;
+    model: any;
+    keyPath: string;
+    array: boolean;
+  };
+  socketWriteStream?: boolean;
   customTags?: Array<{
     name: string;
     [string: string]: any;
@@ -101,3 +114,5 @@ export type MapOfQueries = MapOf<number>;
 export type MapOfPath = MapOf<number>;
 export type NONE = null;
 export const PASS = null as any;
+export const COLLAPSED = null as any;
+export type SocketStream<T> = AsyncGenerator<T>;

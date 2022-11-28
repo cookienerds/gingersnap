@@ -10,12 +10,13 @@
     "experimentalDecorators": true,
     "esModuleInterop": true,
     "emitDecoratorMetadata": true,
-    "target": "ES5",
+    "target": "es2015",
     "outDir": "lib",
     "lib": [
       "dom",
       "es2021.intl",
-      "es2015"
+      "es2015",
+      "es2018.asyncgenerator"
     ],
     "allowSyntheticDefaultImports": true
   },
