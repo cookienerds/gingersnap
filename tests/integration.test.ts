@@ -1,9 +1,9 @@
 import { GingerSnap } from "../src";
-import { User, UserService } from "./services/user";
+import { User, UserService } from "./mocks/user";
 import * as R from "ramda";
-import { UtilService } from "./services/util";
+import { UtilService } from "./mocks/util";
 import "blob-polyfill";
-import { AuthService } from "./services/auth";
+import { AuthService } from "./mocks/auth";
 import { THROTTLE_DEFAULT_MS } from "../src/annotations/service";
 import {
   createModelClassAnnotationTag,

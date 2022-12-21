@@ -1,5 +1,6 @@
-import { Field, Model } from "./model/Model";
-import { MapOfHeaders } from "./service";
+import { Model } from "./model";
+import { MapOfHeaders } from "../service";
+import { Field } from "./property";
 
 /**
  * Class that represents credentials used for sending authorized requests

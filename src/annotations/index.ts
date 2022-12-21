@@ -1,9 +1,9 @@
-import { Callable, CallGroup } from "./Call";
+import { Callable, CallChain, CallGroup } from "../utils/call";
 import { Model } from "./model";
 import { Service } from "./service";
 
-export { Call, CallGroup, Callable } from "./Call";
-export * from "./Credentials";
+export { Call, CallGroup, Callable } from "../utils/call";
+export * from "./model/credentials";
 
 export interface GingerSnapProps {
   baseUrl?: string;
@@ -55,6 +55,14 @@ export class GingerSnap {
   }
 
   /**
+   * Creates a chained sequence of the given Callables
+   * @param calls A list of Callables
+   */
+  public chain<T extends Model>(calls: Array<Callable<any>>): CallChain<T> {
+    return new CallChain<T>(calls);
+  }
+
+  /**
    * Returns when the first one finishes or errors out
    * @param calls
    * @param ModelType
@@ -63,3 +71,5 @@ export class GingerSnap {
     return new CallGroup<T>(calls, true, ModelType);
   }
 }
+
+export const Injectable = (target: any, propertyKey: string) => null;

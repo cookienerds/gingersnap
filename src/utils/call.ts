@@ -1,8 +1,10 @@
-import { NONE, ResponseType, ThrottleByProps } from "./service/types";
+import { NONE, ResponseType, ThrottleByProps } from "../annotations/service/types";
 import CallExecutionError from "../errors/CallExecutionError";
-import { Model } from "./model/Model";
+import { Model } from "../annotations/model/model";
 import MissingArgumentsError from "../errors/MissingArgumentsError";
 import * as R from "ramda";
+import { DataFormat } from "../annotations/model";
+import MissingResponse from "../errors/MissingResponse";
 
 /**
  * Interface for objects that can be called to execute a network request
@@ -53,7 +55,7 @@ export abstract class AbstractCall<T extends Model | Model[] | String | String[]
     if (ModelClass != null && responseType === undefined) {
       throw new MissingArgumentsError(["responseType"]);
     }
-    if (responseType != null && ModelClass === undefined) {
+    if (responseType != null && ModelClass === undefined && responseType !== ResponseType.BINARY) {
       throw new MissingArgumentsError(["responseType"]);
     }
 
@@ -113,7 +115,7 @@ export abstract class AbstractCall<T extends Model | Model[] | String | String[]
           );
         }
         const Class = this.ModelClass as typeof Model;
-        return Class.fromXML<any>(await resp.text());
+        return Class.fromString<any>(await resp.text(), DataFormat.XML);
       }
       case ResponseType.BINARY: {
         return (await resp.blob()) as T;
@@ -139,7 +141,7 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
    * Callback function to do post-processing once network request has successfully completed
    * @private
    */
-  protected readonly callback: Function;
+  protected readonly callback?: Function;
 
   /**
    * AbortController used to cancel http request created by the callback
@@ -161,7 +163,7 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
 
   constructor(
     executor: (v: AbortSignal) => Promise<Response>,
-    callback: Function,
+    callback?: Function,
     ModelClass?: typeof Model | typeof String,
     throttle?: ThrottleByProps,
     responseType?: ResponseType,
@@ -200,13 +202,15 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
     const resp = await this.executor(this.controller.signal);
     this.executingCallback = false;
 
+    if (!resp) throw new MissingResponse();
+    if (!(resp instanceof Response)) return resp;
     if (!resp.ok) {
       throw new CallExecutionError(`Received response status code of ${resp.status}`, resp);
     }
     const response = rawResponse
       ? ((await resp.blob()) as T)
       : await this.__process_response__(resp, this.responseType);
-    let callbackResponse = this.callback.bind({ context: response })();
+    let callbackResponse = this.callback?.bind({ context: response })();
     if (callbackResponse instanceof Promise) {
       callbackResponse = await callbackResponse;
     } else if (callbackResponse instanceof AbstractCall) {
@@ -214,6 +218,32 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
     }
     if (callbackResponse) return callbackResponse as T;
     return response;
+  }
+}
+
+export class CallChain<T extends Model> extends AbstractCall<T> {
+  private readonly remainingCalls: Array<Callable<any>>;
+
+  constructor(chain: Array<Callable<any>>) {
+    super();
+    this.remainingCalls = chain;
+  }
+
+  cancel(reason: any): void {
+    R.forEach((call) => call.cancel(), this.remainingCalls);
+  }
+
+  clone(): Callable<T> {
+    return new CallChain(this.remainingCalls);
+  }
+
+  async execute(rawResponse: boolean | undefined): Promise<T> {
+    let result: any = null;
+    for (const call of this.remainingCalls) {
+      result = await call.execute();
+    }
+
+    return result as T;
   }
 }
 

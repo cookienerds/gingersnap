@@ -1,4 +1,4 @@
-import { Credentials } from "../Credentials";
+import { Credentials } from "../model/credentials";
 
 export enum RequestType {
   GET = "GET",
@@ -84,6 +84,7 @@ export interface MethodConfiguration {
     array: boolean;
   };
   socketWriteStream?: boolean;
+  decoder?: any;
   customTags?: Array<{
     name: string;
     [string: string]: any;

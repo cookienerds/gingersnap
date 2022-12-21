@@ -1,9 +1,9 @@
-import { Credentials } from "../Credentials";
+import { Credentials } from "../model/credentials";
 import { BodyType, MapOfHeaders, MethodConfiguration, RequestType, ResponseType, ServiceInternalProps } from "./types";
 import * as R from "ramda";
-import { Call } from "../Call";
+import { Call } from "../../utils/call";
 import CallExecutionError from "../../errors/CallExecutionError";
-import { Model } from "../model/Model";
+import { Model } from "../model";
 import { GingerSnapProps } from "../index";
 import { HTTPStatus, THROTTLE_DEFAULT_MS } from "./network";
 
@@ -59,7 +59,8 @@ export class Service {
   /**
    * Context representing ResponseData created after the network request is complete.
    * Value varies per network request method, and is scoped to the calling method
-   * E.g.
+   * @example
+   * ```ts
    * class Snap extends Service {
    *   @GET("/data")
    *   @JSONResponse(Data)
@@ -69,6 +70,7 @@ export class Service {
    *     console.log(this.context);
    *   }
    * }
+   * ```
    * @protected
    */
   protected context: any;
