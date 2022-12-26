@@ -4,7 +4,7 @@ import { AnyDataType } from "../types";
 
 export class Queue<T extends AnyDataType> extends WatchableObject implements Iterator<T> {
   private writePointer: number;
-  private readonly maxSize?: number;
+  private maxSize?: number;
   private readPointer: number;
 
   constructor(objectMaxSize?: number, expiryMs?: number) {
@@ -12,6 +12,29 @@ export class Queue<T extends AnyDataType> extends WatchableObject implements Ite
     this.writePointer = -1;
     this.readPointer = -1;
     this.maxSize = objectMaxSize;
+  }
+
+  get asyncIterator(): AsyncGenerator<T> {
+    const self = this;
+    const generator = {
+      [Symbol.asyncIterator](): AsyncGenerator<T> {
+        return generator;
+      },
+      return(value?: any): any {
+        return value;
+      },
+      throw(e?: any): any {
+        throw e;
+      },
+      async next(...args: [] | [unknown]): Promise<IteratorResult<T>> {
+        return { done: false, value: await self.awaitPop() };
+      },
+    };
+    return generator;
+  }
+
+  [Symbol.iterator](): Iterator<T> {
+    return this;
   }
 
   next(...args: [] | [undefined]): IteratorResult<T, any> {
@@ -27,7 +50,17 @@ export class Queue<T extends AnyDataType> extends WatchableObject implements Ite
     throw e;
   }
 
-  close() {}
+  close() {
+    this.targetObject.clear();
+  }
+
+  clear() {
+    const objectMaxSize = this.maxSize;
+    this.targetObject.clear();
+    this.writePointer = -1;
+    this.readPointer = -1;
+    this.maxSize = objectMaxSize;
+  }
 
   get empty() {
     return this.tail <= this.head;

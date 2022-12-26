@@ -4,7 +4,7 @@ import * as R from "ramda";
  * Object that is cyclical - has can store M keys, after which new key value pairs added override
  * previous entries.
  */
-export class CyclicalObject {
+export class CyclicalObject implements Iterable<any> {
   /**
    * Proxy object
    * @protected
@@ -65,6 +65,10 @@ export class CyclicalObject {
         this[v] = this[v].bind(this);
       }
     });
+  }
+
+  [Symbol.iterator](): Iterator<any, any, undefined> {
+    return this.realTargetObject[Symbol.iterator]();
   }
 
   /**

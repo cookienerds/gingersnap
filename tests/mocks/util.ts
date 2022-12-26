@@ -1,4 +1,4 @@
-import { Call, BasicCredentials } from "../../src";
+import { Call } from "../../src";
 import {
   GET,
   POST,
@@ -21,6 +21,7 @@ import {
   PASS,
 } from "../../src/annotations/service";
 import { User } from "./user";
+import { BasicCredentials } from "../../src/annotations/model/credentials";
 
 @BaseUrl("https://test.com")
 export class UtilService extends Service {
@@ -30,7 +31,7 @@ export class UtilService extends Service {
   }
 
   @POST("api/v1/auth/refresh")
-  @JSONResponse(BasicCredentials)
+  @JSONResponse({ modelType: BasicCredentials })
   @AuthRefresher(BasicCredentials)
   private refresh(@JSONBody credentials: BasicCredentials): Call<BasicCredentials> {
     return PASS;

@@ -10,12 +10,13 @@ import {
   POST,
   Service,
 } from "../../src/annotations/service";
-import { BearerCredentials, Call } from "../../src";
+import { Call } from "../../src";
+import { BearerCredentials } from "../../src/annotations/model/credentials";
 
 export class AuthService extends Service {
   @POST("api/v1/auth/login")
   @FormUrlEncoded
-  @JSONResponse(BearerCredentials)
+  @JSONResponse({ modelType: BearerCredentials })
   @Authenticator(BearerCredentials, true)
   public loginWithEmailAndPassword(
     @Field("email") email: string,
@@ -25,7 +26,7 @@ export class AuthService extends Service {
   }
 
   @POST("api/v1/auth/refresh")
-  @JSONResponse(BearerCredentials)
+  @JSONResponse({ modelType: BearerCredentials })
   @AuthRefresher(BearerCredentials, true)
   private refresh(@JSONBody credentials: BearerCredentials): Call<BearerCredentials> {
     return PASS;

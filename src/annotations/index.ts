@@ -1,9 +1,6 @@
-import { Callable, CallChain, CallGroup } from "../utils/call";
-import { Model } from "./model";
 import { Service } from "./service";
 
-export { Call, CallGroup, Callable } from "../utils/call";
-export * from "./model/credentials";
+export { Call, Callable } from "../utils/call";
 
 export interface GingerSnapProps {
   baseUrl?: string;
@@ -44,32 +41,4 @@ export class GingerSnap {
     (instance as any).__setup__();
     return instance;
   }
-
-  /**
-   * Creates a CallGroup that groups the given Callables
-   * @param calls A list of Callables
-   * @param ModelType Class used to serialize the smashed response from the callables
-   */
-  public group<T extends Model>(calls: Array<Callable<any>>, ModelType: any): CallGroup<T> {
-    return new CallGroup<T>(calls, false, ModelType);
-  }
-
-  /**
-   * Creates a chained sequence of the given Callables
-   * @param calls A list of Callables
-   */
-  public chain<T extends Model>(calls: Array<Callable<any>>): CallChain<T> {
-    return new CallChain<T>(calls);
-  }
-
-  /**
-   * Returns when the first one finishes or errors out
-   * @param calls
-   * @param ModelType
-   */
-  public race<T extends Model[]>(calls: Array<Callable<any>>, ModelType: any): CallGroup<T> {
-    return new CallGroup<T>(calls, true, ModelType);
-  }
 }
-
-export const Injectable = (target: any, propertyKey: string) => null;

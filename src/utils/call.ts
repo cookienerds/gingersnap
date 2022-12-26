@@ -2,37 +2,15 @@ import { NONE, ResponseType, ThrottleByProps } from "../annotations/service/type
 import CallExecutionError from "../errors/CallExecutionError";
 import { Model } from "../annotations/model/model";
 import MissingArgumentsError from "../errors/MissingArgumentsError";
-import * as R from "ramda";
 import { DataFormat } from "../annotations/model";
-import MissingResponse from "../errors/MissingResponse";
-
-/**
- * Interface for objects that can be called to execute a network request
- */
-export interface Callable<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE> {
-  /**
-   * Cancels all network requests that have been executed
-   * @param reason optional message explaining the cause for cancellation
-   */
-  cancel: (reason?: any) => void;
-
-  /**
-   * Clones this Callable object
-   */
-  clone: () => Callable<T>;
-
-  /**
-   * Execute network requests and returning the associated model/s
-   */
-  execute: (rawResponse?: boolean) => Promise<T>;
-}
+import StreamEnded from "../errors/StreamEnded";
+import { AnyDataType } from "./types";
+import { Stream } from "./stream";
 
 /**
  * Abstract Callable class with generic processing functionalities
  */
-export abstract class AbstractCall<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE>
-  implements Callable<T>
-{
+export class Callable<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE> extends Stream<any> {
   /**
    * Type of response body expected from the callback's Response Object
    * @protected
@@ -51,7 +29,13 @@ export abstract class AbstractCall<T extends Model | Model[] | String | String[]
    */
   protected readonly arrayResponseSupport: boolean;
 
-  protected constructor(ModelClass?: typeof Model | typeof String, responseType?: ResponseType, arrayResponse = false) {
+  protected constructor(
+    executor: (v: AbortSignal) => Promise<AnyDataType>,
+    ModelClass?: typeof Model | typeof String,
+    responseType?: ResponseType,
+    arrayResponse = false
+  ) {
+    super(executor);
     if (ModelClass != null && responseType === undefined) {
       throw new MissingArgumentsError(["responseType"]);
     }
@@ -63,12 +47,6 @@ export abstract class AbstractCall<T extends Model | Model[] | String | String[]
     this.responseType = responseType;
     this.arrayResponseSupport = arrayResponse;
   }
-
-  abstract cancel(reason: any): void;
-
-  abstract clone(): Callable<T>;
-
-  abstract execute(rawResponse?: boolean): Promise<T>;
 
   /**
    * Converts json object to a Model instance/Array of Models
@@ -129,25 +107,12 @@ export abstract class AbstractCall<T extends Model | Model[] | String | String[]
 /**
  * A Callable structure for executing single network request
  */
-export class Call<T extends Model | Model[] | String | Blob | NONE> extends AbstractCall<T> {
-  /**
-   * Callback function that executes a network request. Function should accept an AbortSignal as argument,
-   * and return Response object upon completion
-   * @private
-   */
-  protected readonly executor: (v: AbortSignal) => Promise<Response>;
-
+export class Call<T extends Model | Model[] | String | Blob | NONE> extends Callable<T> {
   /**
    * Callback function to do post-processing once network request has successfully completed
    * @private
    */
   protected readonly callback?: Function;
-
-  /**
-   * AbortController used to cancel http request created by the callback
-   * @private
-   */
-  private readonly controller: AbortController;
 
   /**
    * Throttle configuration for the call
@@ -162,23 +127,17 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
   private executingCallback: boolean;
 
   constructor(
-    executor: (v: AbortSignal) => Promise<Response>,
+    executor: (v: AbortSignal) => Promise<AnyDataType>,
     callback?: Function,
     ModelClass?: typeof Model | typeof String,
     throttle?: ThrottleByProps,
     responseType?: ResponseType,
     arrayResponse = false
   ) {
-    super(ModelClass, responseType, arrayResponse);
-    this.controller = new AbortController();
-    this.executor = executor;
+    super(executor, ModelClass, responseType, arrayResponse);
     this.callback = callback;
     this.throttle = throttle;
     this.executingCallback = false;
-  }
-
-  public cancel(reason?: any): void {
-    this.controller.abort(reason);
   }
 
   public clone(): Call<T> {
@@ -199,11 +158,10 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
     if (this.throttle?.waitPeriodInMs) {
       await new Promise((resolve) => setTimeout(resolve, this.throttle?.waitPeriodInMs));
     }
-    const resp = await this.executor(this.controller.signal);
+    const resp = await super.execute();
     this.executingCallback = false;
 
-    if (!resp) throw new MissingResponse();
-    if (!(resp instanceof Response)) return resp;
+    if (!resp) throw new StreamEnded();
     if (!resp.ok) {
       throw new CallExecutionError(`Received response status code of ${resp.status}`, resp);
     }
@@ -213,117 +171,10 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Abst
     let callbackResponse = this.callback?.bind({ context: response })();
     if (callbackResponse instanceof Promise) {
       callbackResponse = await callbackResponse;
-    } else if (callbackResponse instanceof AbstractCall) {
+    } else if (callbackResponse instanceof Callable) {
       callbackResponse = await callbackResponse.execute();
     }
     if (callbackResponse) return callbackResponse as T;
     return response;
-  }
-}
-
-export class CallChain<T extends Model> extends AbstractCall<T> {
-  private readonly remainingCalls: Array<Callable<any>>;
-
-  constructor(chain: Array<Callable<any>>) {
-    super();
-    this.remainingCalls = chain;
-  }
-
-  cancel(reason: any): void {
-    R.forEach((call) => call.cancel(), this.remainingCalls);
-  }
-
-  clone(): Callable<T> {
-    return new CallChain(this.remainingCalls);
-  }
-
-  async execute(rawResponse: boolean | undefined): Promise<T> {
-    let result: any = null;
-    for (const call of this.remainingCalls) {
-      result = await call.execute();
-    }
-
-    return result as T;
-  }
-}
-
-/**
- * A Callable Structure for executing multiple requests concurrently
- */
-export class CallGroup<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE> extends AbstractCall<T> {
-  /**
-   * List of Callable objects that should be executed
-   * @private
-   */
-  private readonly calls: Array<Callable<any>>;
-
-  /**
-   * Checks if the requests should be raced (first one that completes should be processed)
-   * @private
-   */
-  private readonly race: boolean;
-
-  constructor(
-    calls: Array<Callable<any>>,
-    race?: boolean,
-    ModelClass?: typeof Model | typeof String,
-    responseType?: ResponseType,
-    arrayResponse = false
-  ) {
-    super(ModelClass, responseType, arrayResponse);
-    this.calls = calls;
-    this.race = race ?? false;
-  }
-
-  public cancel(reason?: any): void {
-    this.calls.forEach((call) => call.cancel(reason));
-  }
-
-  public clone(): CallGroup<T> {
-    return new CallGroup(this.calls, this.race, this.ModelClass, this.responseType, this.arrayResponseSupport);
-  }
-
-  public async execute(rawResponse = false): Promise<T> {
-    if (this.ModelClass !== undefined) {
-      let responses: Blob[];
-      if (this.race) {
-        const result = await Promise.race(this.calls.map(async (v) => await v.execute(true)));
-        if (result instanceof Array) responses = R.flatten(result);
-        else responses = [result];
-      } else {
-        responses = R.flatten(await Promise.all(this.calls.map(async (v) => await v.execute(true))));
-      }
-
-      if (rawResponse) {
-        return responses as any;
-      }
-
-      switch (this.responseType) {
-        case ResponseType.STRING: {
-          if (this.arrayResponseSupport) {
-            return (await Promise.all(responses.map(async (v) => new String(await v.text())))) as T;
-          }
-          const texts = await Promise.all(responses.map(async (v) => await v.text()));
-          return new String(texts.join("\n")) as T;
-        }
-        case ResponseType.JSON: {
-          const compacted = R.reduce(
-            R.mergeDeepWith(R.concat),
-            {},
-            await Promise.all(responses.map(async (v) => JSON.parse(await v.text())))
-          );
-          return await this.__process_json__(compacted, undefined);
-        }
-        case ResponseType.XML:
-          throw new CallExecutionError("XML not currently supported");
-        case ResponseType.BINARY:
-          throw new CallExecutionError("Binary not currently supported");
-        default:
-          return null as T;
-      }
-    }
-
-    if (this.race) return [await Promise.race(this.calls.map(async (v) => await v.execute(rawResponse)))] as T;
-    return (await Promise.race(this.calls.map(async (v) => await v.execute(rawResponse)))) as T;
   }
 }

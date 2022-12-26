@@ -1,6 +1,6 @@
 import { Stream } from "../../utils/stream";
-import { Optional } from "../../utils/Optional";
-import { Model } from "./Model";
+import { Optional } from "../../utils/optional";
+import { Model } from "./model";
 
 /**
  * Abstract class for managing a collection of models of the same type

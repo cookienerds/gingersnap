@@ -1,11 +1,10 @@
-import { Call } from "./call";
 import CallExecutionError from "../errors/CallExecutionError";
-import { ResponseType, ThrottleByProps } from "../annotations/service/types";
-import { Model } from "../annotations/model";
-import MissingResponse from "../errors/MissingResponse";
+import StreamEnded from "../errors/StreamEnded";
 import { wait, WaitPeriod } from "./timer";
 import * as R from "ramda";
-import { Flattened } from "./types";
+import { AnyDataType, Flattened } from "./types";
+import { Future, FutureResult } from "./future";
+import FutureCancelled from "../errors/FutureCancelled";
 
 enum ActionType {
   TRANSFORM,
@@ -25,34 +24,68 @@ interface LimitResult<T> {
   done: boolean;
 }
 type ActionFunctor<T> = (v: T) => T | null | Promise<T> | LimitResult<T> | Promise<LimitResult<T>>;
-export class Stream<T> extends Call<any> implements AsyncGenerator<T> {
+
+export class Stream<T> implements AsyncGenerator<T> {
   private executed: boolean;
+
   private actions: Array<{ type: ActionType; functor: ActionFunctor<T> }>;
 
   private done: boolean;
 
   private backlog: Array<{ records: T[]; actionIndex: number }>;
 
-  constructor(
-    executor: (v: AbortSignal) => Promise<Response>,
-    callback?: Function,
-    ModelClass?: typeof Model | typeof String,
-    throttle?: ThrottleByProps,
-    responseType?: ResponseType,
-    arrayResponse?: boolean
-  ) {
-    super(executor, callback, ModelClass, throttle, responseType, arrayResponse);
+  /**
+   * AbortController used to cancel http request created by the callback
+   * @private
+   */
+  private readonly controller: AbortController;
+
+  /**
+   * Callback function that executes a network request. Function should accept an AbortSignal as argument,
+   * and return AnyDataType upon completion
+   * @private
+   */
+  protected readonly executor: (v: AbortSignal) => Promise<AnyDataType>;
+
+  constructor(executor: (v: AbortSignal) => Promise<AnyDataType>) {
+    this.executor = executor;
+    this.controller = new AbortController();
     this.executed = false;
     this.done = false;
     this.actions = [];
     this.backlog = [];
   }
 
-  static of<K>(value: Iterable<K>) {
-    const iterator = value[Symbol.iterator]();
-    return new Stream<K>((signal) => {
-      if (!signal.aborted) return iterator.next().value;
-      return null as any;
+  public static asCompleted(futures: Array<Future<any>>, timeout: WaitPeriod | number) {
+    return new Stream(async (signal) => {
+      signal.onabort = () => {
+        futures.forEach((future) => future.cancel());
+      };
+      if (signal.aborted) throw new FutureCancelled();
+
+      if (futures.length > 0) {
+        const result = await Promise.race(
+          futures.map((future, index) => future.then((v) => [v.value, index] as [any, number]))
+        );
+        const [value, index] = result.value;
+        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+        delete futures[index];
+        return value;
+      }
+    });
+  }
+
+  static of<K>(value: Iterable<K> | AsyncGenerator<K>) {
+    if (value[Symbol.iterator]) {
+      const iterator = value[Symbol.iterator]();
+      return new Stream<K>((signal) => {
+        if (!signal.aborted) return iterator.next().value;
+      });
+    }
+
+    const iterator = value[Symbol.asyncIterator]();
+    return new Stream<K>(async (signal) => {
+      if (!signal.aborted) return (await iterator.next()).value;
     });
   }
 
@@ -62,11 +95,12 @@ export class Stream<T> extends Call<any> implements AsyncGenerator<T> {
     return newStream as unknown as Stream<K>;
   }
 
-  filter(callback: (v: T) => boolean | Promise<boolean>) {
+  filter(callback: (v: T) => boolean | Promise<boolean>): Stream<T> {
     const newStream = this.clone();
     newStream.actions.push({
       type: ActionType.TRANSFORM,
       functor: async (v) => {
+        if (v instanceof FutureResult) v = v.value;
         let result = callback(v);
         if (result instanceof Promise) result = await result;
         if (result) return v;
@@ -113,19 +147,16 @@ export class Stream<T> extends Call<any> implements AsyncGenerator<T> {
   }
 
   clone(): Stream<T> {
-    const newStream = new Stream<T>(
-      this.executor,
-      this.callback,
-      this.ModelClass,
-      this.throttle,
-      this.responseType,
-      this.arrayResponseSupport
-    );
+    const newStream = new Stream<T>(this.executor);
     newStream.actions = this.actions;
     newStream.executed = this.executed;
     newStream.done = this.done;
     newStream.backlog = this.backlog;
     return newStream;
+  }
+
+  public cancel(reason?: any): void {
+    this.controller.abort(reason);
   }
 
   take(count: number) {
@@ -160,7 +191,7 @@ export class Stream<T> extends Call<any> implements AsyncGenerator<T> {
 
   throttleBy(period: WaitPeriod) {
     const newStream = this.clone();
-    let future: Promise<void> | undefined;
+    let future: Future<void> | undefined;
 
     newStream.actions.push({
       type: ActionType.TRANSFORM,
@@ -215,7 +246,7 @@ export class Stream<T> extends Call<any> implements AsyncGenerator<T> {
       }
       return { done: true, value: undefined };
     } catch (error) {
-      if (error instanceof MissingResponse) return { done: true, value: null };
+      if (error instanceof StreamEnded) return { done: true, value: null };
       throw error;
     }
   }
@@ -229,7 +260,7 @@ export class Stream<T> extends Call<any> implements AsyncGenerator<T> {
         if (state !== State.CONTINUE) return { done: true, value };
       }
     } catch (error) {
-      if (error instanceof MissingResponse) return { done: true, value: null };
+      if (error instanceof StreamEnded) return { done: true, value: null };
       throw error;
     }
   }
@@ -243,12 +274,12 @@ export class Stream<T> extends Call<any> implements AsyncGenerator<T> {
     };
   }
 
-  async execute(rawResponse: boolean = false): Promise<T> {
+  async execute(): Promise<T> {
     if (this.executed) throw new CallExecutionError("Cannot rerun a one time stream");
-    return (await this.__execute__(rawResponse)).value!;
+    return (await this.__execute__()).value!;
   }
 
-  private async __execute__(rawResponse: boolean = false): Promise<{ state: State; value?: T }> {
+  private async __execute__(): Promise<{ state: State; value?: T }> {
     this.executed = true;
     let data: any;
     let index = 0;
@@ -261,7 +292,7 @@ export class Stream<T> extends Call<any> implements AsyncGenerator<T> {
         this.backlog.shift();
       }
     } else {
-      data = await super.execute(rawResponse);
+      data = await this.executor(this.controller.signal);
     }
 
     for (let i = index; i < this.actions.length; i++) {

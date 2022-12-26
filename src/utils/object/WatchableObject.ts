@@ -46,8 +46,8 @@ export class WatchableObject extends WaitableObject {
     });
 
     this.proxyObj = new Proxy(this.targetObject, {
-      get: (target: Map<any, any>, p: string, receiver: any) => {
-        if (!classProperties.has(p)) {
+      get: (target: Map<any, any>, p: string | symbol, receiver: any) => {
+        if (typeof p !== "symbol" && !classProperties.has(p)) {
           setTimeout(() => self.getListeners.forEach((listener) => listener(p)), 1);
           return self.get(p);
         }

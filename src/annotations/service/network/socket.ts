@@ -26,9 +26,3 @@ export const WriteStream = (target: any, propertyKey: string) => {
   const typeLens = R.lensPath(["methodConfig", propertyKey, "socketWriteStream"]);
   proto.__internal__ = R.set(typeLens, true, proto.__internal__);
 };
-
-export const Decoder = (instance: any) => (target: any, propertyKey: string) => {
-  const proto = createProps(target.constructor);
-  const typeLens = R.lensPath(["methodConfig", propertyKey, "decoder"]);
-  proto.__internal__ = R.set(typeLens, true, proto.__internal__);
-};

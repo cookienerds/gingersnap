@@ -149,12 +149,12 @@ export class Service {
                   retries < self.retryLimit
                 ) {
                   await new Promise((resolve) => setTimeout(resolve, THROTTLE_DEFAULT_MS));
-                  return lookup(retries + 1);
+                  return await lookup(retries + 1);
                 }
                 return resp;
               });
 
-            return lookup();
+            return await lookup();
           },
           oldMethod,
           value.responseClass,

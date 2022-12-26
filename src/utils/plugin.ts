@@ -57,7 +57,7 @@ export const createModelFieldAnnotationTag =
     onFieldCreated?: (tagName: string, properties: Object, target: Model, fieldName: string) => void
   ) =>
   (target: any, key: string) => {
-    const props: ModelInternalProps = namespacedModelInternalProps[target.constructor.name] ?? { fields: {} };
+    const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: {} };
     const result = R.find(([k, v]) => v.name === key, R.toPairs(props.fields));
 
     if (!result) {
@@ -71,7 +71,7 @@ export const createModelFieldAnnotationTag =
     };
 
     props.parent = Object.getPrototypeOf(target).constructor.name;
-    namespacedModelInternalProps[target.constructor.name] = props;
+    namespacedModelInternalProps.set(target.constructor.name, props);
   };
 
 /**

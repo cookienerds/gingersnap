@@ -1,3 +1,6 @@
+/**
+ * Formatting used with converting data to models
+ */
 export enum DataFormat {
   AVRO,
   CSV,
@@ -7,6 +10,10 @@ export enum DataFormat {
   CBOR,
 }
 
+/**
+ * Supported data types
+ * @beta
+ */
 export enum DataType {
   RECORD = "record",
   NULL = "null",

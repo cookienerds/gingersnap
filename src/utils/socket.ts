@@ -1,8 +1,10 @@
 import NetworkError from "../errors/NetworkError";
-import { HTTPStatus, ResponseType } from "../annotations/service";
+import { HTTPStatus } from "../annotations/service";
 import { Stream } from "./stream";
 import { Queue } from "./object/Queue";
 import { wait } from "./timer";
+import { v4 as uuid } from "uuid";
+import StreamEnded from "../errors/StreamEnded";
 
 type SocketFunctor<T extends CloseEvent | Event | MessageEvent> = (this: WebSocket, evt: T) => any;
 
@@ -26,7 +28,8 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
 
   private closePromiseCallbacks!: [() => void, (reason?: any) => void];
 
-  private readonly messageQueue: Queue<Response>;
+  private readonly messageQueue: Queue<Blob>;
+  private readonly streamQueue: Map<string, Queue<Blob>>;
 
   private readonly url: string;
   private socket?: WebSocket;
@@ -41,8 +44,6 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
 
   private backoffPeriods: number;
 
-  binaryType: "blob" | "arraybuffer";
-
   constructor(
     url: string,
     { retryOnDisconnect, cacheSize, cacheExpiryMs, exponentialFactor, backoffPeriodMs }: WebSocketConfiguration = {}
@@ -51,12 +52,12 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
     this.url = url;
     this.cacheSize = cacheSize ?? 10000;
     this.manuallyClosed = false;
-    this.binaryType = "blob";
     this.retryOnDisconnect = retryOnDisconnect ?? true;
     this.exponentialFactor = exponentialFactor ?? 2;
     this.backoffPeriodMs = backoffPeriodMs ?? 10;
     this.backoffPeriods = -1;
-    this.messageQueue = new Queue<Response>(this.cacheSize, cacheExpiryMs ?? 60000);
+    this.messageQueue = new Queue<Blob>(this.cacheSize, cacheExpiryMs ?? 60000);
+    this.streamQueue = new Map<string, Queue<Blob>>();
   }
 
   get opened() {
@@ -117,7 +118,7 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
         });
         const cancelQueue = this.addEventListener("message", (evt: MessageEvent) => {
           const data = evt.data;
-          this.messageQueue.push(new Response(data));
+          this.messageQueue.push(typeof data === "string" ? new Blob([data]) : data);
         });
         this.createSocket();
       });
@@ -141,6 +142,8 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
   close() {
     this.manuallyClosed = true;
     this.getSocket()?.close();
+    this.streamQueue.clear();
+    this.messageQueue.close();
   }
 
   /**
@@ -154,19 +157,40 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
   /**
    * Gets the stream for messages received via this socket
    */
-  get stream() {
-    return new Stream<T>(
-      async (signal) => {
-        if (!this.closed) {
-          const value: any = await Promise.race([this.messageQueue.awaitPop(signal), this.awaitClosed()]);
-          if (value) return value;
-        }
-      },
-      undefined,
-      undefined,
-      undefined,
-      ResponseType.BINARY
-    );
+  get stream(): Stream<T> {
+    const guid = uuid();
+    return new Stream<T>(async (signal) => {
+      if (!this.closed) {
+        const value = await Promise.race([(await this.getQueue(guid)).awaitPop(signal), this.awaitClosed()]);
+        if (value) return value;
+        else this.removeQueue(guid);
+      }
+      throw new StreamEnded();
+    });
+  }
+
+  private removeQueue(guid: string) {
+    this.streamQueue.delete(guid);
+  }
+
+  private async getQueue(guid: string) {
+    let queue = this.streamQueue.get(guid);
+    if (!queue) {
+      queue = new Queue<Blob>();
+      this.streamQueue.set(guid, queue);
+    }
+
+    if (!this.messageQueue.empty) {
+      await Stream.of(this.messageQueue)
+        .map((v: Blob) =>
+          Stream.of(this.streamQueue.values())
+            .map((queue: Queue<Blob>) => queue.push(v))
+            .execute()
+        )
+        .execute();
+    }
+
+    return queue;
   }
 
   private addEventListener<T extends CloseEvent | Event | MessageEvent>(
@@ -186,7 +210,7 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
 
   private createSocket() {
     const socket = new WebSocket(this.url);
-    socket.binaryType = this.binaryType;
+    socket.binaryType = "blob";
     this.socketListeners.forEach(([type, functor]) => socket.addEventListener(type, functor));
     this.socket = socket;
     return socket;

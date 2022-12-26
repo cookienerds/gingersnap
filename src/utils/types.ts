@@ -12,6 +12,9 @@ export type AnyObject =
 
 export type AnyDataType =
   | AnyObject
+  | Blob
+  // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
+  | void
   | Response
   | AnyObject[]
   | string

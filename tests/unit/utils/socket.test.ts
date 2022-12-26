@@ -51,7 +51,7 @@ describe("Browser WebSocket", function () {
     await Promise.race([socket.open(), wait({ seconds: 1 })]);
     testMessages.forEach((message) => server.send(message));
     const responseMessage = await socket.stream
-      .map(async (v) => await v.text())
+      .map((v) => v.text())
       .take(testMessages.length)
       .collect();
 

@@ -305,7 +305,7 @@ export class Model {
   /**
    * Constructs the model properties by traversing the inheritance tree of the current Model being instantiated
    * @param namespace Name of the model
-   * @private
+   * @ignore
    */
   private static buildPropTree(namespace: string): ModelInternalProps {
     let value: ModelInternalProps | undefined;
