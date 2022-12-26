@@ -31,7 +31,7 @@ build_image:
     - npm config set -- '//gitlab.com/api/v4/projects/31753272/packages/npm/:_authToken' "$CI_JOB_TOKEN"
     - cd lib && npm publish
 
-docs:
+pages:
   stage: deploy
   script:
     - npm run docs
