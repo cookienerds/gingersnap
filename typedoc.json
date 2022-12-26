@@ -1,10 +1,10 @@
 {
   "entryPoints": [
-    "src/annotations/model/collection.ts",
-    "src/annotations/model/model.ts",
-    "src/annotations/model/property.ts",
-    "src/annotations/model/types.ts"
+    "src/annotations",
+    "src/utils",
+    "src/errors"
   ],
+  "entryPointStrategy": "expand",
   "out": "docs",
   "theme": "my-theme",
   "darkHighlightTheme": "dark-plus",
