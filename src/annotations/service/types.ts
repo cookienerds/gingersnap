@@ -1,4 +1,5 @@
-import { Credentials } from "../Credentials";
+import { Credentials } from "../model/credentials";
+import { DataFormat } from "../model";
 
 export enum RequestType {
   GET = "GET",
@@ -77,10 +78,11 @@ export interface MethodConfiguration {
   responseClass?: any;
   responseArray?: boolean;
   throttle?: ThrottleByProps;
+  dataFormat?: DataFormat;
   socketReadStream?: {
     value: string | RegExp;
     model: any;
-    keyPath: string;
+    keyPath: string | Array<string | number>;
     array: boolean;
   };
   socketWriteStream?: boolean;

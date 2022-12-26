@@ -1,9 +1,8 @@
 import { GingerSnap } from "../src";
-import { User, UserService } from "./services/user";
+import { User, UserService } from "./mocks/user";
 import * as R from "ramda";
-import { UtilService } from "./services/util";
-import "blob-polyfill";
-import { AuthService } from "./services/auth";
+import { UtilService } from "./mocks/util";
+import { AuthService } from "./mocks/auth";
 import { THROTTLE_DEFAULT_MS } from "../src/annotations/service";
 import {
   createModelClassAnnotationTag,
@@ -12,6 +11,9 @@ import {
   getModelFieldAnnotationTagProperties,
 } from "../src/utils/plugin";
 import { Field, Model } from "../src/annotations/model";
+import { StreamUser, UserStream } from "./mocks/stream";
+import WS from "jest-websocket-mock";
+import { users } from "./data/users.json";
 
 jest.setTimeout(10000);
 
@@ -45,11 +47,7 @@ const MOCKED_USERS = [
 
 describe("Test Network Service", function () {
   it("should lookup all users", async () => {
-    (global.fetch as any) = async () => ({
-      json: async () => MOCKED_USERS,
-      status: 200,
-      ok: true,
-    });
+    (global.fetch as any) = async () => new Response(JSON.stringify(MOCKED_USERS));
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
     const service = snap.create(UserService);
@@ -71,8 +69,7 @@ describe("Test Network Service", function () {
   it("should lookup user profile and bio", async () => {
     (global.fetch as any) = async (url: string) => {
       if (url.toString() === "https://test.com/feeds/users/test-id") {
-        return {
-          text: async () => `
+        return new Response(`
           <?xml version="1.0" encoding="ISO-8859-1" ?>
           <profile>
             <profilePicture>picture.jpeg</profilePicture>
@@ -99,16 +96,9 @@ describe("Test Network Service", function () {
             <updatedAt>January 21, 2022</updatedAt>
             <totalReferences>1</totalReferences>
           </profile>
-          `,
-          status: 200,
-          ok: true,
-        };
+          `);
       }
-      return {
-        text: Promise.resolve("Invalid request"),
-        status: 400,
-        ok: false,
-      };
+      return new Response("Invalid request", { status: 400 });
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -133,11 +123,7 @@ describe("Test Network Service", function () {
   });
 
   it("should create user", async () => {
-    (global.fetch as any) = async () => ({
-      json: async () => R.clone(MOCKED_USERS[0]),
-      status: 200,
-      ok: true,
-    });
+    (global.fetch as any) = async () => new Response(JSON.stringify(MOCKED_USERS[0]));
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
     const service = snap.create(UserService);
@@ -149,17 +135,9 @@ describe("Test Network Service", function () {
   it("should delete user", async () => {
     (global.fetch as any) = async (url: string, options: any) => {
       if (url.toString() === "https://test.com/users/test-id" && options.headers["Session-Id"] === "test-session") {
-        return {
-          json: async () => R.clone(MOCKED_USERS[0]),
-          status: 200,
-          ok: true,
-        };
+        return new Response(JSON.stringify(MOCKED_USERS[0]));
       }
-      return {
-        text: async () => "",
-        status: 400,
-        ok: false,
-      };
+      return new Response(undefined, { status: 400 });
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -176,17 +154,9 @@ describe("Test Network Service", function () {
         options.headers["Session-Id"] === "test-session" &&
         options.method.toLowerCase() === "put"
       ) {
-        return {
-          json: async () => R.clone(MOCKED_USERS[0]),
-          status: 200,
-          ok: true,
-        };
+        return new Response(JSON.stringify(MOCKED_USERS[0]));
       }
-      return {
-        text: async () => "",
-        status: 400,
-        ok: false,
-      };
+      return new Response(undefined, { status: 400 });
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -201,26 +171,14 @@ describe("Test Network Service", function () {
   it("should get user by query", async () => {
     (global.fetch as any) = async (url: string, options: any) => {
       if (url.toString() === "https://test.com/users?name=test" && options.method.toLowerCase() === "get") {
-        return {
-          json: async () => R.clone(MOCKED_USERS[0]),
-          status: 200,
-          ok: true,
-        };
+        return new Response(JSON.stringify(MOCKED_USERS[0]));
       } else if (
         url.toString() === "https://test.com/users?name=test&tel=1234567" &&
         options.method.toLowerCase() === "get"
       ) {
-        return {
-          json: async () => R.clone(MOCKED_USERS[0]),
-          status: 200,
-          ok: true,
-        };
+        return new Response(JSON.stringify(MOCKED_USERS[0]));
       }
-      return {
-        text: async () => "",
-        status: 400,
-        ok: false,
-      };
+      return new Response(undefined, { status: 400 });
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -242,17 +200,9 @@ describe("Test Network Service", function () {
   it("should get user by overriding queries", async () => {
     (global.fetch as any) = async (url: string, options: any) => {
       if (url.toString() === "https://test.com/users?tel=0987654321" && options.method.toLowerCase() === "get") {
-        return {
-          json: async () => R.clone(MOCKED_USERS[0]),
-          status: 200,
-          ok: true,
-        };
+        return new Response(JSON.stringify(MOCKED_USERS[0]));
       }
-      return {
-        text: async () => "",
-        status: 400,
-        ok: false,
-      };
+      return new Response(undefined, { status: 400 });
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -269,11 +219,7 @@ describe("Test Network Service", function () {
   });
 
   it("should complete health check", async () => {
-    (global.fetch as any) = async (url: string, options: any) => ({
-      text: async () => "Ok",
-      status: 200,
-      ok: true,
-    });
+    (global.fetch as any) = async (url: string, options: any) => new Response("Ok");
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
     const service = snap.create(UtilService);
@@ -284,27 +230,20 @@ describe("Test Network Service", function () {
   });
 
   it("should get binary data response", async () => {
-    (global.fetch as any) = async (url: string, options: any) => ({
-      blob: async () => new Blob(["Ok"]),
-      status: 200,
-      ok: true,
-    });
+    (global.fetch as any) = async (url: string, options: any) => new Response("Ok");
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
     const service = snap.create(UtilService);
     const resp = await service.downloadFile().execute();
 
-    expect(resp instanceof Blob).toBeTruthy();
+    expect(Object.getPrototypeOf(resp).constructor.name).toBe("Blob");
     expect(await resp.text()).toEqual("Ok");
   });
 
   it("should upload text file", async () => {
     (global.fetch as any) = async (url: string, options: any) => {
       expect(options.body).toEqual("sample text");
-      return {
-        status: 200,
-        ok: true,
-      };
+      return new Response();
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -322,10 +261,7 @@ describe("Test Network Service", function () {
         ["name", "test"],
         ["age", "21"],
       ]);
-      return {
-        status: 200,
-        ok: true,
-      };
+      return new Response();
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -340,10 +276,7 @@ describe("Test Network Service", function () {
     (global.fetch as any) = async (url: string, options: any) => {
       called++;
       if (!options.headers.Authorization) {
-        return {
-          status: 401,
-          ok: false,
-        };
+        return new Response(undefined, { status: 401 });
       }
       expect(options.headers.Authorization.includes("Basic ")).toBeTruthy();
       expect(options.headers["Content-Type"]).toBe("multipart/form-data");
@@ -352,10 +285,7 @@ describe("Test Network Service", function () {
         ["file", new File([new Blob(["test"])], "name")],
         ["name", "test-upload"],
       ]);
-      return {
-        status: 200,
-        ok: true,
-      };
+      return new Response();
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -371,32 +301,20 @@ describe("Test Network Service", function () {
     (global.fetch as any) = async (url: string, options: any) => {
       if (url.toString() === "https://test.com/api/v1/auth/refresh") {
         refreshed = true;
-        return {
-          json: async () => ({
+        return new Response(
+          JSON.stringify({
             username: "test",
             password: "password",
-          }),
-          status: 200,
-          ok: true,
-        };
+          })
+        );
       } else if (url.toString() === "https://test.com/upload/xml" && refreshed) {
         expect(options.headers.Authorization).toEqual(`Basic ${btoa("test:password")}`);
         expect(options.body).toEqual(User.fromJSON(MOCKED_USERS[0]).xml());
-        return {
-          status: 200,
-          ok: true,
-        };
+        return new Response();
       } else if (url.toString() === "https://test.com/upload/xml" && !refreshed) {
-        return {
-          status: 401,
-          ok: false,
-        };
+        return new Response(undefined, { status: 401 });
       }
-      return {
-        text: async () => "",
-        status: 400,
-        ok: false,
-      };
+      return new Response(undefined, { status: 400 });
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -412,16 +330,9 @@ describe("Test Network Service", function () {
     (global.fetch as any) = async (url: string, options: any) => {
       called++;
       if (called <= 3) {
-        return {
-          status: 503,
-          ok: false,
-        };
+        return new Response(undefined, { status: 503 });
       }
-      return {
-        text: async () => "check",
-        status: 200,
-        ok: true,
-      };
+      return new Response("check");
     };
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
@@ -435,11 +346,8 @@ describe("Test Network Service", function () {
   });
 
   it("should login with optional field", async () => {
-    (global.fetch as any) = async (url: string, options: any) => ({
-      json: async () => ({ accessToken: "jwt", refreshToken: "jwt-refresh" }),
-      status: 200,
-      ok: true,
-    });
+    (global.fetch as any) = async (url: string, options: any) =>
+      new Response(JSON.stringify({ accessToken: "jwt", refreshToken: "jwt-refresh" }));
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
     const service = snap.create(AuthService);
@@ -488,5 +396,20 @@ describe("Test Network Service", function () {
         tagProperties: { test2: true },
       },
     ]);
+  });
+
+  it("should stream users from socket", async () => {
+    const url = "ws://localhost.com";
+    const server = new WS(url);
+    const snap = new GingerSnap({ baseUrl: url });
+    const service = snap.create(UserStream);
+    await service.ready();
+    users.forEach((user) => server.send(JSON.stringify(user)));
+    expect(await service.getDCUsers().take(2).collect()).toEqual(
+      users
+        .filter((v) => v.address.state === "DC")
+        .slice(0, 2)
+        .map((v) => StreamUser.fromJSON(v))
+    );
   });
 });

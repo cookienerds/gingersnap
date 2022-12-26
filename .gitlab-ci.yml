@@ -3,6 +3,7 @@ image: node:16.4.2
 stages:
   - test
   - build
+  - deploy
 
 cache:
   paths:
@@ -29,3 +30,17 @@ build_image:
     - npm config set registry https://gitlab.com/api/v4/projects/31753272/packages/npm/
     - npm config set -- '//gitlab.com/api/v4/projects/31753272/packages/npm/:_authToken' "$CI_JOB_TOKEN"
     - cd lib && npm publish
+
+docs:
+  stage: deploy
+  script:
+    - npm run docs
+    - rm -rf public
+    - mkdir -p public
+    - mv docs/* public && rm -r docs
+  artifacts:
+    paths:
+      - public
+  only:
+    - main
+    - develop

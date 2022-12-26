@@ -1,9 +1,6 @@
-import { Callable, CallGroup } from "./Call";
-import { Model } from "./model";
 import { Service } from "./service";
 
-export { Call, CallGroup, Callable } from "./Call";
-export * from "./Credentials";
+export { Call, Callable } from "../utils/call";
 
 export interface GingerSnapProps {
   baseUrl?: string;
@@ -43,23 +40,5 @@ export class GingerSnap {
     const instance = new Class({ baseUrl: this.baseUrl, retryLimit: this.retryLimit });
     (instance as any).__setup__();
     return instance;
-  }
-
-  /**
-   * Creates a CallGroup that groups the given Callables
-   * @param calls A list of Callables
-   * @param ModelType Class used to serialize the smashed response from the callables
-   */
-  public group<T extends Model>(calls: Array<Callable<any>>, ModelType: any): CallGroup<T> {
-    return new CallGroup<T>(calls, false, ModelType);
-  }
-
-  /**
-   * Returns when the first one finishes or errors out
-   * @param calls
-   * @param ModelType
-   */
-  public race<T extends Model[]>(calls: Array<Callable<any>>, ModelType: any): CallGroup<T> {
-    return new CallGroup<T>(calls, true, ModelType);
   }
 }

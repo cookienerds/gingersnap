@@ -56,39 +56,39 @@ export class UserProfilePage extends Model {
 
 export class UserService extends Service {
   @GET("users")
-  @JSONResponse(User, true)
+  @JSONResponse({ modelType: User, isArray: true })
   public getUsers(): Call<User[]> {
     return PASS;
   }
 
   @GET("users")
-  @JSONResponse(User)
+  @JSONResponse({ modelType: User })
   @Throttle
   public getUserByName(@Query("name") name: string): Call<User> {
     return PASS;
   }
 
   @GET("users?tel=1234567")
-  @JSONResponse(User)
+  @JSONResponse({ modelType: User })
   @ThrottleBy({ waitPeriodInMs: 1000 })
   public getUserByTel(@Query("tel") tel: string): Call<User> {
     return PASS;
   }
 
   @GET("users")
-  @JSONResponse(User)
+  @JSONResponse({ modelType: User })
   public getUserByProperties(@QueryMap properties: { [string: string]: string }): Call<User> {
     return PASS;
   }
 
-  @JSONResponse(User)
+  @JSONResponse({ modelType: User })
   @POST("users")
   public createUser(@JSONBody user: User): Call<User> {
     return PASS;
   }
 
   @PUT("users/{id}")
-  @JSONResponse(User)
+  @JSONResponse({ modelType: User })
   public updateUser(
     @JSONBody user: User,
     @Path("id") id: string,
@@ -98,7 +98,7 @@ export class UserService extends Service {
   }
 
   @DELETE("users/{id}")
-  @JSONResponse(User)
+  @JSONResponse({ modelType: User })
   public deleteUser(@Path("id") id: string, @Header("Session-Id") sessionId: string): Call<User> {
     return PASS;
   }
@@ -107,7 +107,7 @@ export class UserService extends Service {
     "Content-Type": "application/json",
   })
   @GET("feeds/users/{id}")
-  @XMLResponse(UserProfilePage)
+  @XMLResponse({ modelType: UserProfilePage })
   public getUserFeed(@Path("id") id: string): Call<UserProfilePage> {
     return PASS;
   }

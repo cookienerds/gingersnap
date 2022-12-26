@@ -1,7 +1,13 @@
 import { BodyType, MapOfHeaders, ResponseType, ServiceInternalProps, ThrottleByProps } from "../types";
 import * as R from "ramda";
 import "reflect-metadata";
+import { DataFormat } from "../../model";
 
+interface ResponseDetails {
+  modelType: any;
+  isArray?: boolean;
+  format?: DataFormat;
+}
 /// //// Constants ///////
 export const THROTTLE_DEFAULT_MS = 3000;
 const SUPPORTED_HEADER_VALUES = ["String", "Number", "Boolean"];
@@ -17,15 +23,17 @@ export const createProps = (constructor: any) => {
 
 const createResponseDecorator =
   (type: ResponseType) =>
-  (modelType: any = String, array = false) =>
+  ({ modelType, format, isArray }: ResponseDetails = { modelType: String, isArray: false }) =>
   (target: any, propertyKey: string) => {
     const proto = createProps(target.constructor);
     const lens = R.lensPath(["methodConfig", propertyKey, "responseType"]);
+    const formatLens = R.lensPath(["methodConfig", propertyKey, "dataFormat"]);
     const typeLens = R.lensPath(["methodConfig", propertyKey, "responseClass"]);
     const isArrayLens = R.lensPath(["methodConfig", propertyKey, "responseArray"]);
     proto.__internal__ = R.set(lens, type, proto.__internal__);
     proto.__internal__ = R.set(typeLens, modelType, proto.__internal__);
-    proto.__internal__ = R.set(isArrayLens, array, proto.__internal__);
+    proto.__internal__ = R.set(isArrayLens, isArray, proto.__internal__);
+    proto.__internal__ = R.set(formatLens, format, proto.__internal__);
   };
 
 const createRequestBodyDecorator = (type: BodyType) => (target: any, propertyKey: string, parameterIndex: number) => {
@@ -72,12 +80,12 @@ export const XMLResponse = createResponseDecorator(ResponseType.XML);
 /**
  * Marks the SnapService method as on that returns a String Response
  */
-export const StringResponse = createResponseDecorator(ResponseType.STRING)(String);
+export const StringResponse = createResponseDecorator(ResponseType.STRING)({ modelType: String });
 
 /**
  * Marks the SnapService method as on that returns a Blob
  */
-export const BinaryResponse = createResponseDecorator(ResponseType.BINARY)(Blob);
+export const BinaryResponse = createResponseDecorator(ResponseType.BINARY)({ modelType: Blob });
 
 /**
  * Marks the SnapService method as on that has no return value
