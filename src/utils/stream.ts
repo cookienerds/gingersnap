@@ -228,6 +228,12 @@ export class Stream<T> implements AsyncGenerator<T> {
     return collection;
   }
 
+  async consume() {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-empty
+    for await (const _ of this) {
+    }
+  }
+
   [Symbol.asyncIterator](): AsyncGenerator<T, any, unknown> {
     return this;
   }
