@@ -10,7 +10,7 @@ import { Stream } from "./stream";
 /**
  * Abstract Callable class with generic processing functionalities
  */
-export class Callable<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE> extends Stream<any> {
+export class Callable<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE> extends Stream<T> {
   /**
    * Type of response body expected from the callback's Response Object
    * @protected
@@ -158,7 +158,7 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Call
     if (this.throttle?.waitPeriodInMs) {
       await new Promise((resolve) => setTimeout(resolve, this.throttle?.waitPeriodInMs));
     }
-    const resp = await super.execute();
+    const resp = (await super.execute()) as unknown as Response;
     this.executingCallback = false;
 
     if (!resp) throw new StreamEnded();
