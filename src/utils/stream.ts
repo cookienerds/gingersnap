@@ -8,12 +8,13 @@ import FutureCancelled from "../errors/FutureCancelled";
 
 enum ActionType {
   TRANSFORM,
+  FILTER,
   LIMIT,
   UNPACK,
   PACK,
 }
 
-enum State {
+export enum State {
   MATCHED,
   CONTINUE,
   DONE,
@@ -26,13 +27,13 @@ interface LimitResult<T> {
 type ActionFunctor<T> = (v: T) => T | null | Promise<T> | LimitResult<T> | Promise<LimitResult<T>>;
 
 export class Stream<T> implements AsyncGenerator<T> {
-  private executed: boolean;
+  protected executed: boolean;
 
-  private actions: Array<{ type: ActionType; functor: ActionFunctor<T> }>;
+  protected actions: Array<{ type: ActionType; functor: ActionFunctor<T> }>;
 
-  private done: boolean;
+  protected done: boolean;
 
-  private backlog: Array<{ records: T[]; actionIndex: number }>;
+  protected backlog: Array<{ records: T[]; actionIndex: number }>;
 
   /**
    * AbortController used to cancel http request created by the callback
@@ -98,7 +99,7 @@ export class Stream<T> implements AsyncGenerator<T> {
   filter(callback: (v: T) => boolean | Promise<boolean>): Stream<T> {
     const newStream = this.clone();
     newStream.actions.push({
-      type: ActionType.TRANSFORM,
+      type: ActionType.FILTER,
       functor: async (v) => {
         if (v instanceof FutureResult) v = v.value;
         let result = callback(v);
@@ -148,10 +149,10 @@ export class Stream<T> implements AsyncGenerator<T> {
 
   clone(): Stream<T> {
     const newStream = new Stream<T>(this.executor);
-    newStream.actions = this.actions;
+    newStream.actions = [...this.actions];
     newStream.executed = this.executed;
     newStream.done = this.done;
-    newStream.backlog = this.backlog;
+    newStream.backlog = [...this.backlog];
     return newStream;
   }
 
@@ -179,7 +180,7 @@ export class Stream<T> implements AsyncGenerator<T> {
     let index = 1;
 
     newStream.actions.push({
-      type: ActionType.TRANSFORM,
+      type: ActionType.FILTER,
       functor: (value) => {
         if (index && index++ <= count) return null;
         index = 0;
@@ -228,9 +229,19 @@ export class Stream<T> implements AsyncGenerator<T> {
     return collection;
   }
 
-  async consume() {
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-empty
-    for await (const _ of this) {
+  async consume(limit = Number.POSITIVE_INFINITY) {
+    if (limit !== Number.POSITIVE_INFINITY && limit !== Number.NEGATIVE_INFINITY) {
+      if (limit === 0) return;
+
+      let index = 0;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _ of this) {
+        if (++index >= limit) break;
+      }
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-empty
+      for await (const _ of this) {
+      }
     }
   }
 
@@ -285,27 +296,32 @@ export class Stream<T> implements AsyncGenerator<T> {
     return (await this.__execute__()).value!;
   }
 
-  private async __execute__(): Promise<{ state: State; value?: T }> {
+  protected async __execute__(
+    preProcessor: <T>(a: T) => T | Promise<T> = R.identity
+  ): Promise<{ state: State; value?: T }> {
     this.executed = true;
-    let data: any;
     let index = 0;
+    let data: any;
 
-    if (this.backlog.length > 0) {
-      const { actionIndex, records } = this.backlog[0];
-      index = actionIndex;
-      data = records.shift();
-      if (records.length === 0) {
-        this.backlog.shift();
+    if (!data) {
+      if (this.backlog.length > 0) {
+        const { actionIndex, records } = this.backlog[0];
+        index = actionIndex;
+        data = records.shift();
+        if (records.length === 0) {
+          this.backlog.shift();
+        }
+      } else {
+        data = await this.executor(this.controller.signal);
       }
-    } else {
-      data = await this.executor(this.controller.signal);
     }
 
     for (let i = index; i < this.actions.length; i++) {
       const { type, functor } = this.actions[i];
       switch (type) {
-        case ActionType.TRANSFORM: {
-          let result = functor(data);
+        case ActionType.FILTER: {
+          const preResult = preProcessor(data);
+          let result = functor(preResult instanceof Promise ? await preResult : preResult);
 
           if (result instanceof Promise) result = await result;
           if (result === null || result === undefined) {
@@ -314,8 +330,17 @@ export class Stream<T> implements AsyncGenerator<T> {
           data = result as T;
           break;
         }
+        case ActionType.TRANSFORM: {
+          const preResult = preProcessor(data);
+          let result = functor(preResult instanceof Promise ? await preResult : preResult);
+
+          if (result instanceof Promise) result = await result;
+          data = result as T;
+          break;
+        }
         case ActionType.PACK: {
-          let result = functor(data) as LimitResult<T>;
+          const preResult = preProcessor(data);
+          let result = functor(preResult instanceof Promise ? await preResult : preResult) as LimitResult<T>;
 
           if (result instanceof Promise) result = await result;
           if (!result.done) {
@@ -325,7 +350,8 @@ export class Stream<T> implements AsyncGenerator<T> {
           break;
         }
         case ActionType.LIMIT: {
-          let result = functor(data) as LimitResult<T>;
+          const preResult = preProcessor(data);
+          let result = functor(preResult instanceof Promise ? await preResult : preResult) as LimitResult<T>;
 
           if (result instanceof Promise) result = await result;
           if (result.done) {
@@ -335,7 +361,8 @@ export class Stream<T> implements AsyncGenerator<T> {
           break;
         }
         case ActionType.UNPACK: {
-          let result = functor(data) as T[];
+          const preResult = preProcessor(data);
+          let result = functor(preResult instanceof Promise ? await preResult : preResult) as T[];
 
           if (result instanceof Promise) result = await result;
           if (result.length === 0) {

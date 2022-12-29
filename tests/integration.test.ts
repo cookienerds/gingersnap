@@ -320,9 +320,13 @@ describe("Test Network Service", function () {
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
     const service = snap.create(UtilService);
     service.loginAnonymously();
-    const resp = await service.uploadXML(User.fromJSON(MOCKED_USERS[0])).execute();
-
-    expect(resp).toBe(null);
+    await service
+      .uploadXML(User.fromJSON(MOCKED_USERS[0]))
+      .map((v) => {
+        expect(v).toBe(null);
+        return 0;
+      })
+      .consume(1);
   });
 
   it("should retry request on service failure", async () => {

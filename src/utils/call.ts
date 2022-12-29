@@ -5,7 +5,7 @@ import MissingArgumentsError from "../errors/MissingArgumentsError";
 import { DataFormat } from "../annotations/model";
 import StreamEnded from "../errors/StreamEnded";
 import { AnyDataType } from "./types";
-import { Stream } from "./stream";
+import { State, Stream } from "./stream";
 
 /**
  * Abstract Callable class with generic processing functionalities
@@ -141,7 +141,7 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Call
   }
 
   public clone(): Call<T> {
-    return new Call<T>(
+    const newStream = new Call<T>(
       this.executor,
       this.callback,
       this.ModelClass,
@@ -149,6 +149,11 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Call
       this.responseType,
       this.arrayResponseSupport
     );
+    newStream.actions = [...this.actions];
+    newStream.executed = this.executed;
+    newStream.done = this.done;
+    newStream.backlog = [...this.backlog];
+    return newStream;
   }
 
   public async execute(rawResponse = false): Promise<T> {
@@ -176,5 +181,10 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Call
     }
     if (callbackResponse) return callbackResponse as T;
     return response;
+  }
+
+  protected async __execute__(): Promise<{ state: State; value?: T }> {
+    const preprocessor = (v) => (v instanceof Response ? this.__process_response__(v, this.responseType) : v);
+    return await super.__execute__(preprocessor as any);
   }
 }
