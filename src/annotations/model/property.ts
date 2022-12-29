@@ -28,12 +28,16 @@ const createFieldUpdater =
  */
 const createValidator = (functor: (v: any) => boolean, error: Error, updater?: (f: FieldProps) => void) =>
   createFieldUpdater(({ field, target, key }) => {
-    const descriptor = Object.getOwnPropertyDescriptor(target, key)!;
-    const prevSet = descriptor.set;
-    descriptor.set = function (this: any, v) {
-      if (!functor(v)) throw error;
-      if (prevSet) prevSet.call(this, v);
-    };
+    const symbol = Symbol(key);
+    Object.defineProperty(target, key, {
+      get: function () {
+        return this[symbol];
+      },
+      set: function (v: any) {
+        if (!functor(v)) throw error;
+        this[symbol] = v;
+      },
+    });
     if (updater) updater(field);
   });
 
