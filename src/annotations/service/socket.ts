@@ -51,7 +51,11 @@ export class WebSocketService extends Service {
         if (!details) throw new ParsingError([], "ReadStreamDetailsMissing");
         if (!config.responseClass) throw new ParsingError([], "ResponseTypeMissing");
         dataComparator = R.compose(
-          typeof details.value === "string" ? R.equals(new String(details.value)) : details.value.test,
+          typeof details.value === "string"
+            ? R.equals(new String(details.value))
+            : details.value instanceof RegExp
+            ? details.value.test
+            : R.equals(details.value),
           R.view(
             typeof details.keyPath === "string" ? R.lensProp<any, any>(details.keyPath) : R.lensPath(details.keyPath)
           )
