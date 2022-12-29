@@ -345,7 +345,7 @@ export class Model {
 
       if (value === undefined && fieldProps.ignore?.deserialize) {
         return;
-      } else if (value === undefined) {
+      } else if (value === undefined && (model[key] === undefined || model[key] === null)) {
         throw new ParsingError([], `Property ${key} is missing from the data provided`);
       }
 
