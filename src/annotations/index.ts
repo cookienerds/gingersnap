@@ -37,7 +37,7 @@ export class GingerSnap {
    * @param baseUrl host used by the service
    */
   public create<T extends Service>(Class: new (v: GingerSnapProps) => T, baseUrl?: string): T {
-    const instance = new Class({ baseUrl: this.baseUrl, retryLimit: this.retryLimit });
+    const instance = new Class({ baseUrl: baseUrl ?? this.baseUrl, retryLimit: this.retryLimit });
     (instance as any).__setup__();
     return instance;
   }
