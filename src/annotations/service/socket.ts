@@ -58,14 +58,19 @@ export class WebSocketService extends Service {
         );
       }
 
-      this[key] = (...args: any[]) => {
-        const { body } = parentService.__constructor_call_args__(new URL(this.baseUrl), {}, config, args);
-
+      this[key] = (body?: any) => {
         if (config.socketWriteStream) {
-          if (body === undefined) throw new CallExecutionError("Empty body detected for a write stream");
+          if (body === undefined || body === null)
+            throw new CallExecutionError("Empty body detected for a write stream");
           return new Stream(async (signal) => {
             await this.socket.open();
-            this.socket.send(JSON.stringify(body));
+            if (body instanceof Model) {
+              this.socket.send(body.blob());
+            } else if (body instanceof ArrayBuffer || body instanceof Blob) {
+              this.socket.send(body);
+            } else {
+              this.socket.send(JSON.stringify(body));
+            }
             const result = oldMethod();
             if (result instanceof Promise) {
               await result;
