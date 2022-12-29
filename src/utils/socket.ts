@@ -117,8 +117,14 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
           }
         });
         const cancelQueue = this.addEventListener("message", (evt: MessageEvent) => {
-          const data = evt.data;
-          this.messageQueue.push(typeof data === "string" ? new Blob([data]) : data);
+          const data = typeof evt.data === "string" ? new Blob([evt.data]) : evt.data;
+          if (this.streamQueue.size > 0) {
+            void Stream.of(this.streamQueue.values())
+              .map((queue) => queue.push(data))
+              .execute();
+          } else {
+            this.messageQueue.push(data);
+          }
         });
         this.createSocket();
       });
