@@ -84,10 +84,7 @@ export class Stream<T> implements AsyncGenerator<T> {
       });
     }
 
-    const iterator =
-      value.constructor.name === "AsyncGeneratorFunction"
-        ? (value as AsyncGeneratorFunction)()
-        : value[Symbol.asyncIterator]();
+    const iterator = value instanceof Function ? value() : value[Symbol.asyncIterator]();
     return new Stream<K>(async (signal) => {
       if (!signal.aborted) return (await iterator.next()).value;
     });
