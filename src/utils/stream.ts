@@ -76,7 +76,7 @@ export class Stream<T> implements AsyncGenerator<T> {
     });
   }
 
-  static of<K>(value: Iterable<K> | AsyncGenerator<K>) {
+  static of<K>(value: Iterable<K> | AsyncGenerator<K> | AsyncGeneratorFunction) {
     if (value[Symbol.iterator]) {
       const iterator = value[Symbol.iterator]();
       return new Stream<K>((signal) => {
@@ -84,7 +84,10 @@ export class Stream<T> implements AsyncGenerator<T> {
       });
     }
 
-    const iterator = value[Symbol.asyncIterator]();
+    const iterator =
+      value.constructor.name === "AsyncGeneratorFunction"
+        ? (value as AsyncGeneratorFunction)()
+        : value[Symbol.asyncIterator]();
     return new Stream<K>(async (signal) => {
       if (!signal.aborted) return (await iterator.next()).value;
     });
