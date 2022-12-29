@@ -347,6 +347,8 @@ export class Model {
         return;
       } else if (value === undefined && (model[key] === undefined || model[key] === null)) {
         throw new ParsingError([], `Property ${key} is missing from the data provided`);
+      } else if (value === undefined && !(model[key] === undefined || model[key] === null)) {
+        return;
       }
 
       if (fieldProps.isArray && fieldProps.Type.prototype instanceof Model) {
