@@ -119,13 +119,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
         const cancelQueue = this.addEventListener("message", (evt: MessageEvent) => {
           const data = typeof evt.data === "string" ? new Blob([evt.data]) : evt.data;
           if (this.streamQueue.size > 0) {
-            while (!this.messageQueue.empty) {
-              const data = this.messageQueue.pop();
-              for (const queue of this.streamQueue.values()) {
-                queue.push(data);
-              }
-            }
-
+            this.loadBackfilledMessages();
             for (const queue of this.streamQueue.values()) queue.push(data);
           } else {
             this.messageQueue.push(data);
@@ -190,7 +184,17 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
       queue = new Queue<Blob>();
       this.streamQueue.set(guid, queue);
     }
+    this.loadBackfilledMessages();
     return queue;
+  }
+
+  private loadBackfilledMessages() {
+    while (!this.messageQueue.empty) {
+      const data = this.messageQueue.pop();
+      for (const queue of this.streamQueue.values()) {
+        queue.push(data);
+      }
+    }
   }
 
   private addEventListener<T extends CloseEvent | Event | MessageEvent>(
