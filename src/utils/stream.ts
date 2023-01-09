@@ -2,9 +2,10 @@ import CallExecutionError from "../errors/CallExecutionError";
 import StreamEnded from "../errors/StreamEnded";
 import { wait, WaitPeriod } from "./timer";
 import * as R from "ramda";
-import { AnyDataType, Flattened } from "./types";
+import { AnyDataType, Flattened, InferErrorResult, InferStreamResult } from "./types";
 import { Future, FutureResult } from "./future";
 import FutureCancelled from "../errors/FutureCancelled";
+import { ExecutorState } from "./state";
 
 enum ActionType {
   TRANSFORM,
@@ -12,6 +13,7 @@ enum ActionType {
   LIMIT,
   UNPACK,
   PACK,
+  CATCH,
 }
 
 export enum State {
@@ -24,7 +26,8 @@ interface LimitResult<T> {
   value?: T;
   done: boolean;
 }
-type ActionFunctor<T> = (v: T) => T | null | Promise<T> | LimitResult<T> | Promise<LimitResult<T>>;
+type ActionFunctor<T> = (v: T) => T | null | Promise<T> | LimitResult<T> | Promise<LimitResult<T>> | Stream<T>;
+export type Executor = (v: AbortSignal) => Promise<AnyDataType> | AnyDataType | ExecutorState<AnyDataType>;
 
 export class Stream<T> implements AsyncGenerator<T> {
   protected executed: boolean;
@@ -33,7 +36,9 @@ export class Stream<T> implements AsyncGenerator<T> {
 
   protected done: boolean;
 
-  protected backlog: Array<{ records: T[]; actionIndex: number }>;
+  protected backlog: Array<{ records: T[] | Stream<T>; actionIndex: number }>;
+
+  private canRunExecutor: boolean;
 
   /**
    * AbortController used to cancel http request created by the callback
@@ -46,13 +51,14 @@ export class Stream<T> implements AsyncGenerator<T> {
    * and return AnyDataType upon completion
    * @private
    */
-  protected readonly executor: (v: AbortSignal) => Promise<AnyDataType>;
+  protected executor: Executor;
 
-  constructor(executor: (v: AbortSignal) => Promise<AnyDataType>) {
+  constructor(executor: Executor) {
     this.executor = executor;
     this.controller = new AbortController();
     this.executed = false;
     this.done = false;
+    this.canRunExecutor = true;
     this.actions = [];
     this.backlog = [];
   }
@@ -76,24 +82,66 @@ export class Stream<T> implements AsyncGenerator<T> {
     });
   }
 
-  static of<K>(value: Iterable<K> | AsyncGenerator<K> | AsyncGeneratorFunction) {
+  static empty() {
+    return new Stream<null>(() => null);
+  }
+
+  static fromBatchIterator<K extends AnyDataType>(
+    batchGenerator: (batchSize?: number, ...args: any[]) => Promise<K>,
+    batchSize = 1,
+    ...args: any[]
+  ) {
+    return new Stream<K>(async (signal) => {
+      if (!signal.aborted) {
+        const result = await batchGenerator(batchSize, ...args);
+        if (result instanceof Array) return new ExecutorState(result.length === 0, result) as any;
+        return new ExecutorState(R.isNil(result), result) as any;
+      }
+    })
+      .flatten()
+      .filter(R.complement(R.isNil));
+  }
+
+  static of<K>(value: Iterable<K> | AsyncGenerator<K> | AsyncGeneratorFunction | Future<K>) {
     if (value[Symbol.iterator]) {
       const iterator = value[Symbol.iterator]();
       return new Stream<K>((signal) => {
-        if (!signal.aborted) return iterator.next().value;
+        if (!signal.aborted) {
+          const { value, done } = iterator.next();
+          return new ExecutorState(done, value);
+        }
+      });
+    } else if (value instanceof Future) {
+      return new Stream<K>(async (signal) => {
+        value.registerSignal(signal);
+        return new ExecutorState(true, await value) as any;
       });
     }
 
     const iterator = value instanceof Function ? value() : value[Symbol.asyncIterator]();
     return new Stream<K>(async (signal) => {
-      if (!signal.aborted) return (await iterator.next()).value;
+      if (!signal.aborted) {
+        const { value, done } = await iterator.next();
+        return new ExecutorState(done, value) as any;
+      }
     });
   }
 
-  map<K>(callback: (v: T) => K | Promise<K>): Stream<K> {
+  get future() {
+    return Future.of<T>((resolve, reject, signal) => {
+      if (!signal.aborted) {
+        signal.onabort = () => this.cancel();
+        this.execute()
+          .then(resolve as any)
+          .catch(reject);
+      }
+    });
+  }
+
+  map<K>(callback: (v: T) => K | Promise<K> | Future<K> | Stream<K>): Stream<InferStreamResult<K>> {
     const newStream = this.clone();
     newStream.actions.push({ type: ActionType.TRANSFORM, functor: callback as ActionFunctor<T> });
-    return newStream as unknown as Stream<K>;
+    return newStream as unknown as Stream<InferStreamResult<K>>;
   }
 
   filter(callback: (v: T) => boolean | Promise<boolean>): Stream<T> {
@@ -168,11 +216,16 @@ export class Stream<T> implements AsyncGenerator<T> {
       type: ActionType.LIMIT,
       functor: (value) => {
         index++;
-        if (index >= count) return { done: true, value };
+        if (index === count) return { done: true, value };
+        else if (index > count) return { done: true };
         return { value, done: false };
       },
     });
     return newStream;
+  }
+
+  once() {
+    return this.take(1);
   }
 
   skip(count: number) {
@@ -220,6 +273,16 @@ export class Stream<T> implements AsyncGenerator<T> {
     return newStream as unknown as Stream<Flattened<T>>;
   }
 
+  catch<K>(callback: (v: Error) => K | null | undefined): Stream<InferErrorResult<K, T> | T> {
+    const newStream = this.clone();
+
+    newStream.actions.push({
+      type: ActionType.CATCH,
+      functor: callback as ActionFunctor<any>,
+    });
+    return newStream as unknown as Stream<InferErrorResult<K, T> | T>;
+  }
+
   async collect() {
     const collection: T[] = [];
 
@@ -249,8 +312,6 @@ export class Stream<T> implements AsyncGenerator<T> {
     return this;
   }
 
-  next(...args: [] | [unknown]): Promise<IteratorResult<T, any>>;
-  next(...args: [] | [unknown]): Promise<IteratorResult<T, any>>;
   async next(...args: [] | [unknown]): Promise<IteratorResult<T, any>> {
     try {
       while (!this.done) {
@@ -293,90 +354,164 @@ export class Stream<T> implements AsyncGenerator<T> {
 
   async execute(): Promise<T> {
     if (this.executed) throw new CallExecutionError("Cannot rerun a one time stream");
-    return (await this.__execute__()).value!;
+    while (true) {
+      const { state, value } = await this.__execute__();
+
+      if (state !== State.CONTINUE) return value as T;
+    }
+  }
+
+  private async checkBacklog(): Promise<{ index: number; data?: any }> {
+    if (this.backlog.length === 0) return { index: -1 };
+
+    const { actionIndex, records } = this.backlog[0];
+    const index = actionIndex;
+    if (records instanceof Stream) {
+      const { value: data, done } = await records[Symbol.asyncIterator]().next();
+      if (done) {
+        this.backlog.shift();
+        return await this.checkBacklog();
+      }
+      return { index, data };
+    } else {
+      const data = records.shift();
+      if (records.length === 0) {
+        this.backlog.shift();
+      }
+      return { index, data };
+    }
   }
 
   protected async __execute__(
     preProcessor: <T>(a: T) => T | Promise<T> = R.identity
   ): Promise<{ state: State; value?: T }> {
     this.executed = true;
-    let index = 0;
+    let i = 0;
     let data: any;
 
     if (!data) {
-      if (this.backlog.length > 0) {
-        const { actionIndex, records } = this.backlog[0];
-        index = actionIndex;
-        data = records.shift();
-        if (records.length === 0) {
-          this.backlog.shift();
+      try {
+        const { index: actionIndex, data: actionData } = await this.checkBacklog();
+
+        if (actionIndex >= 0) {
+          i = actionIndex;
+          data = actionData;
+        } else if (this.canRunExecutor) {
+          data = this.executor(this.controller.signal);
+          if (data instanceof Future) data = (await data).value;
+          if (data instanceof Promise) data = await data;
+          if (data instanceof ExecutorState) {
+            this.canRunExecutor = !data.done;
+            data = data.value;
+          }
+        } else {
+          return { state: State.DONE };
         }
-      } else {
-        data = await this.executor(this.controller.signal);
+      } catch (e) {
+        const [value, index] = await this.processError(e, i);
+        i = index + 1;
+        if (value === undefined || value === null) return { state: State.CONTINUE };
+        data = value;
       }
     }
 
-    for (let i = index; i < this.actions.length; i++) {
-      const { type, functor } = this.actions[i];
-      switch (type) {
-        case ActionType.FILTER: {
-          const preResult = preProcessor(data);
-          let result = functor(preResult instanceof Promise ? await preResult : preResult);
+    for (; i < this.actions.length; i++) {
+      try {
+        const { type, functor } = this.actions[i];
+        switch (type) {
+          case ActionType.FILTER: {
+            const preResult = preProcessor(data);
+            let result = functor(preResult instanceof Promise ? await preResult : preResult);
 
-          if (result instanceof Promise) result = await result;
-          if (result === null || result === undefined) {
-            return { state: State.CONTINUE };
+            if (result instanceof Promise) result = await result;
+            if (result === null || result === undefined) {
+              return { state: State.CONTINUE };
+            }
+            data = result as T;
+            break;
           }
-          data = result as T;
-          break;
-        }
-        case ActionType.TRANSFORM: {
-          const preResult = preProcessor(data);
-          let result = functor(preResult instanceof Promise ? await preResult : preResult);
+          case ActionType.TRANSFORM: {
+            const preResult = preProcessor(data);
+            let result = functor(preResult instanceof Promise ? await preResult : preResult);
 
-          if (result instanceof Promise) result = await result;
-          data = result as T;
-          break;
-        }
-        case ActionType.PACK: {
-          const preResult = preProcessor(data);
-          let result = functor(preResult instanceof Promise ? await preResult : preResult) as LimitResult<T>;
-
-          if (result instanceof Promise) result = await result;
-          if (!result.done) {
-            return { state: State.CONTINUE };
+            if (result instanceof Promise) result = await result;
+            if (result instanceof Stream) {
+              this.backlog = [{ actionIndex: i + 1, records: result }, ...this.backlog];
+              return { state: State.CONTINUE };
+            }
+            data = result as T;
+            break;
           }
-          data = result.value;
-          break;
-        }
-        case ActionType.LIMIT: {
-          const preResult = preProcessor(data);
-          let result = functor(preResult instanceof Promise ? await preResult : preResult) as LimitResult<T>;
+          case ActionType.PACK: {
+            const preResult = preProcessor(data);
+            let result = functor(preResult instanceof Promise ? await preResult : preResult) as LimitResult<T>;
 
-          if (result instanceof Promise) result = await result;
-          if (result.done) {
-            return { state: State.DONE, value: result.value };
+            if (result instanceof Promise) result = await result;
+            if (!result.done) {
+              return { state: State.CONTINUE };
+            }
+            data = result.value;
+            break;
           }
-          data = result.value;
-          break;
-        }
-        case ActionType.UNPACK: {
-          const preResult = preProcessor(data);
-          let result = functor(preResult instanceof Promise ? await preResult : preResult) as T[];
+          case ActionType.LIMIT: {
+            const preResult = preProcessor(data);
+            let result = functor(preResult instanceof Promise ? await preResult : preResult) as LimitResult<T>;
 
-          if (result instanceof Promise) result = await result;
-          if (result.length === 0) {
-            return { state: State.CONTINUE };
-          } else if (result.length === 1) {
-            data = result[0];
-          } else {
-            const value = result.shift();
-            this.backlog = [{ actionIndex: i + 1, records: result }, ...this.backlog];
-            data = value;
+            if (result instanceof Promise) result = await result;
+            if (result.done) {
+              this.canRunExecutor = false;
+              this.backlog = [];
+              this.actions = this.actions.splice(i + 1);
+              i = -1;
+            }
+            data = result.value;
+            break;
+          }
+          case ActionType.UNPACK: {
+            const preResult = preProcessor(data);
+            let result = functor(preResult instanceof Promise ? await preResult : preResult) as T[];
+
+            if (result instanceof Promise) result = await result;
+            if (result.length === 0) {
+              return { state: State.CONTINUE };
+            } else if (result.length === 1) {
+              data = result[0];
+            } else {
+              const value = result.shift();
+              this.backlog = [{ actionIndex: i + 1, records: result }, ...this.backlog];
+              data = value;
+            }
           }
         }
+      } catch (error: unknown) {
+        const [value, index] = await this.processError(error, i);
+        i = index;
+        if (value !== undefined && value !== null) data = value;
       }
     }
     return { state: State.MATCHED, value: data };
+  }
+
+  private async processError(error: unknown, i: number): Promise<[any, number]> {
+    let errorMessage: Error;
+
+    if (this.actions.length === 0) throw error;
+    else if (!(error instanceof Error)) errorMessage = new Error(error as string);
+    else errorMessage = error;
+
+    const catchAction = this.actions.splice(i + 1).find((v, index) => {
+      if (v.type === ActionType.CATCH) {
+        i = index;
+        return true;
+      }
+      return false;
+    });
+    if (!catchAction) throw error;
+    try {
+      const value = catchAction.functor(errorMessage as any);
+      return [value instanceof Promise ? await value : value, i];
+    } catch (e) {
+      return await this.processError(e, i);
+    }
   }
 }

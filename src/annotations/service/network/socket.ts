@@ -9,14 +9,15 @@ export const ReadStream =
 
     const proto = createProps(target.constructor);
     const typeLens = R.lensPath(["methodConfig", propertyKey, "socketReadStream"]);
-    proto.__internal__ = R.set(
+    proto.__internal__ = R.over(
       typeLens,
-      {
+      (v) => ({
+        ...(v ?? {}),
         keyPath,
         value,
         model: Reflect.getMetadata("design:paramtypes", target, propertyKey)[0],
         array: false,
-      },
+      }),
       proto.__internal__
     );
   };
@@ -25,4 +26,17 @@ export const WriteStream = (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const typeLens = R.lensPath(["methodConfig", propertyKey, "socketWriteStream"]);
   proto.__internal__ = R.set(typeLens, true, proto.__internal__);
+};
+
+export const Take = (amount: number) => (target: any, propertyKey: string) => {
+  const proto = createProps(target.constructor);
+  const typeLens = R.lensPath(["methodConfig", propertyKey, "socketReadStream"]);
+  proto.__internal__ = R.over(
+    typeLens,
+    (v) => ({
+      ...(v ?? {}),
+      take: amount,
+    }),
+    proto.__internal__
+  );
 };

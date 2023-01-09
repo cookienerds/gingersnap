@@ -84,6 +84,7 @@ export interface MethodConfiguration {
     model: any;
     keyPath: string | Array<string | number>;
     array: boolean;
+    take?: number;
   };
   socketWriteStream?: boolean;
   customTags?: Array<{

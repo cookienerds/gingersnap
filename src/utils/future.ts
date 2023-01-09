@@ -2,6 +2,10 @@ import FutureCancelled from "../errors/FutureCancelled";
 import FutureError from "../errors/FutureError";
 import { wait, WaitPeriod } from "./timer";
 import TimeoutError from "../errors/TimeoutError";
+import InvalidValue from "../errors/InvalidValue";
+import * as R from "ramda";
+import { clearTimeout } from "timers";
+import { Stream } from "./stream";
 
 type Resolve<T> = (value: T | PromiseLike<T>) => any;
 type Reject = (reason?: FutureError) => void;
@@ -19,27 +23,48 @@ export class FutureResult<T> {
 }
 
 export class Future<T> extends Promise<FutureResult<T>> {
-  private readonly signal: AbortSignal;
+  private readonly signals: Set<AbortSignal>;
+
+  private signalRegisteredCallback?: (v: AbortSignal) => void;
+
+  private readonly defaultSignal: AbortSignal;
+
   private fulfilled: boolean;
 
   constructor(executor: Executor<T>, signal?: AbortSignal) {
-    const abortSignal = signal ?? new AbortController().signal;
     let done = false;
     let callback: (() => any) | undefined;
 
     super((resolve, reject) => {
-      let rejected = false;
-      let timeout: any;
-      if (abortSignal.aborted) return reject(new FutureCancelled());
-      abortSignal.addEventListener(
-        "abort",
-        () => {
-          if (!rejected) timeout = setTimeout(() => reject(new FutureCancelled()), 1000);
-        },
-        { once: true }
-      );
-      const execute = () =>
-        executor(
+      const execute = function (this: Future<T>) {
+        let rejected = false;
+        const timeouts: any[] = [];
+
+        if (Array.from(this.signals).some((v) => v.aborted)) return reject(new FutureCancelled());
+        const abortSignal = new AbortController().signal;
+        const abort = R.once(() => this.cancelWithSignal(abortSignal));
+
+        this.signals.forEach((v) => {
+          v.addEventListener(
+            "abort",
+            () => {
+              abort();
+              if (!rejected) timeouts.push(setTimeout(() => reject(new FutureCancelled()), 1000));
+            },
+            { once: true }
+          );
+        });
+        this.signalRegisteredCallback = (v) =>
+          v.addEventListener(
+            "abort",
+            () => {
+              abort();
+              if (!rejected) timeouts.push(setTimeout(() => reject(new FutureCancelled()), 1000));
+            },
+            { once: true }
+          );
+
+        void executor(
           (v) => {
             if (v instanceof Promise)
               v.then((v) => {
@@ -56,28 +81,49 @@ export class Future<T> extends Promise<FutureResult<T>> {
           },
           (reason) => {
             rejected = true;
-            clearTimeout(timeout);
+            timeouts.forEach((v) => clearTimeout(v));
             reject(reason);
           },
           abortSignal
         );
+      };
 
       if (!done) callback = execute;
-      else void execute();
+      else void execute.bind(this)();
     });
-    this.signal = abortSignal;
+
+    this.defaultSignal = signal ?? new AbortController().signal;
+    this.signals = new Set<AbortSignal>([this.defaultSignal]);
     this.fulfilled = false;
     this.cancel = this.cancel.bind(this);
     done = true;
-    if (callback) callback();
+    if (callback) callback.bind(this)();
   }
 
   get done() {
     return this.fulfilled;
   }
 
+  get stream() {
+    return Stream.of(this);
+  }
+
+  public registerSignal(signal: AbortSignal) {
+    this.signals.add(signal);
+    if (this.signalRegisteredCallback) this.signalRegisteredCallback(signal);
+  }
+
+  public deregisterSignal(signal: AbortSignal) {
+    if (signal === this.defaultSignal) throw new InvalidValue("Cannot deregister default signal");
+    this.signals.delete(signal);
+  }
+
   public cancel() {
-    this.signal.dispatchEvent(new CustomEvent("abort"));
+    this.signals.forEach(this.cancelWithSignal);
+  }
+
+  private cancelWithSignal(signal: AbortSignal) {
+    signal.dispatchEvent(new CustomEvent("abort"));
   }
 
   // @ts-expect-error
@@ -117,18 +163,16 @@ export class Future<T> extends Promise<FutureResult<T>> {
   }
 
   public static of<K>(
-    value: Promise<InferredFutureResult<K>> | Future<InferredFutureResult<K>> | K | Executor<InferredFutureResult<K>>
+    value: Promise<InferredFutureResult<K>> | Future<InferredFutureResult<K>> | K | Executor<InferredFutureResult<K>>,
+    signal?: AbortSignal
   ): Future<InferredFutureResult<K>> {
     if (value instanceof Promise)
-      return new Future(
-        (resolve, reject) => {
-          value.then(resolve as any).catch((error) => {
-            if (error instanceof FutureError) reject(error);
-            reject(new FutureError(error));
-          });
-        },
-        value instanceof Future ? value.signal : undefined
-      );
+      return new Future((resolve, reject) => {
+        value.then(resolve as any).catch((error) => {
+          if (error instanceof FutureError) reject(error);
+          reject(new FutureError(error));
+        });
+      }, signal ?? (value instanceof Future ? value.defaultSignal : undefined));
     else if (value instanceof Function) return new Future<InferredFutureResult<K>>(value);
     else return new Future((resolve) => resolve(value as any));
   }
@@ -136,9 +180,7 @@ export class Future<T> extends Promise<FutureResult<T>> {
   public static waitFor<K>(value: Future<K>, timeout: WaitPeriod | number) {
     const timeableFuture = wait(timeout);
     return Future.of<K>((resolve, reject, signal) => {
-      signal.onabort = () => {
-        timeableFuture.cancel();
-      };
+      timeableFuture.registerSignal(signal);
       void Promise.race([timeableFuture, value]).then((v) => {
         if (value.done) {
           timeableFuture.cancel();
@@ -148,7 +190,7 @@ export class Future<T> extends Promise<FutureResult<T>> {
         value.cancel();
         reject(new TimeoutError());
       });
-    });
+    }, value.defaultSignal);
   }
 
   public static sleep(timeout: WaitPeriod | number) {

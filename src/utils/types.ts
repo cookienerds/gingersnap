@@ -1,4 +1,5 @@
 import { WaitableObject, WatchableObject } from "./object";
+import { Stream } from "./stream";
 
 export interface ObjectOf<T> {
   [string: string]: T;
@@ -35,3 +36,5 @@ export type AnyDataType =
 
 export type AnyType = AnyDataType | Function | Promise<AnyDataType>;
 export type Flattened<T> = T extends Array<infer U> ? Flattened<U> : T;
+export type InferStreamResult<T> = T extends Stream<infer U> ? U : T;
+export type InferErrorResult<T, K> = T extends undefined | null ? K : T;

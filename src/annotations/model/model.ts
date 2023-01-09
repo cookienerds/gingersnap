@@ -5,7 +5,7 @@ import "reflect-metadata";
 import { DataFormat, DataType } from "./types";
 import Papa from "papaparse";
 import { decode as cborDecode, encode as cborEncode } from "cborg";
-import { decode as msgUnpack, encode as msgPack } from "msgpack5";
+import { decode as msgUnpack, encode as msgPack } from "@msgpack/msgpack";
 import avro from "avsc";
 import NetworkError from "../../errors/NetworkError";
 import NotImplemented from "../../errors/NotImplemented";
@@ -129,7 +129,7 @@ export class Model {
       mode?: any;
     }
   ): Promise<T | T[]> {
-    const fetcher = fetch ?? (await import("node-fetch"));
+    const fetcher = fetch;
     const resp = await fetcher(source, { method: "GET", headers: options?.requestHeaders, mode: options?.mode });
     if (!resp.ok) throw new NetworkError(resp.status);
     return await this.fromBlob<T>(await resp.blob(), format, options);
@@ -273,7 +273,7 @@ export class Model {
    * @returns message pack binary
    */
   public messagePack(): Buffer {
-    return msgPack(this.object());
+    return msgPack(this.object()).buffer as Buffer;
   }
 
   /**

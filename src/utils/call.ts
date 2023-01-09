@@ -4,8 +4,8 @@ import { Model } from "../annotations/model/model";
 import MissingArgumentsError from "../errors/MissingArgumentsError";
 import { DataFormat } from "../annotations/model";
 import StreamEnded from "../errors/StreamEnded";
-import { AnyDataType } from "./types";
-import { State, Stream } from "./stream";
+import { Executor, State, Stream } from "./stream";
+import { ExecutorState } from "./state";
 
 /**
  * Abstract Callable class with generic processing functionalities
@@ -30,12 +30,16 @@ export class Callable<T extends Model | Model[] | String | String[] | Blob | Blo
   protected readonly arrayResponseSupport: boolean;
 
   protected constructor(
-    executor: (v: AbortSignal) => Promise<AnyDataType>,
+    executor: Executor,
     ModelClass?: typeof Model | typeof String,
     responseType?: ResponseType,
     arrayResponse = false
   ) {
-    super(executor);
+    super(((v) => {
+      const result = executor(v);
+      if (result instanceof Promise) return result.then((v) => new ExecutorState(true, v));
+      return new ExecutorState(true, result);
+    }) as unknown as Executor);
     if (ModelClass != null && responseType === undefined) {
       throw new MissingArgumentsError(["responseType"]);
     }
@@ -127,7 +131,7 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Call
   private executingCallback: boolean;
 
   constructor(
-    executor: (v: AbortSignal) => Promise<AnyDataType>,
+    executor: Executor,
     callback?: Function,
     ModelClass?: typeof Model | typeof String,
     throttle?: ThrottleByProps,
@@ -149,6 +153,7 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Call
       this.responseType,
       this.arrayResponseSupport
     );
+    newStream.executor = this.executor;
     newStream.actions = [...this.actions];
     newStream.executed = this.executed;
     newStream.done = this.done;
@@ -166,7 +171,8 @@ export class Call<T extends Model | Model[] | String | Blob | NONE> extends Call
     const resp = (await super.execute()) as unknown as Response;
     this.executingCallback = false;
 
-    if (!resp) throw new StreamEnded();
+    if (!resp) return resp;
+    if (!(resp instanceof Response)) return resp;
     if (!resp.ok) {
       throw new CallExecutionError(`Received response status code of ${resp.status}`, resp);
     }

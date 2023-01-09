@@ -51,7 +51,7 @@ export class Queue<T extends AnyDataType> extends WatchableObject implements Ite
   }
 
   close() {
-    this.targetObject.clear();
+    this.clear();
   }
 
   clear() {

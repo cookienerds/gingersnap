@@ -19,7 +19,7 @@ interface WebSocketConfiguration {
 /**
  * Promise based web sockets
  */
-export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
+export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
   private readonly retryOnDisconnect: boolean;
   private openPromise?: Promise<void>;
   private closePromise?: Promise<void>;
@@ -119,9 +119,14 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
         const cancelQueue = this.addEventListener("message", (evt: MessageEvent) => {
           const data = typeof evt.data === "string" ? new Blob([evt.data]) : evt.data;
           if (this.streamQueue.size > 0) {
-            void Stream.of(this.streamQueue.values())
-              .map((queue) => queue.push(data))
-              .execute();
+            while (!this.messageQueue.empty) {
+              const data = this.messageQueue.pop();
+              for (const queue of this.streamQueue.values()) {
+                queue.push(data);
+              }
+            }
+
+            for (const queue of this.streamQueue.values()) queue.push(data);
           } else {
             this.messageQueue.push(data);
           }
@@ -185,17 +190,6 @@ export class BrowserWebSocket<T extends Blob | ArrayBuffer = Blob> {
       queue = new Queue<Blob>();
       this.streamQueue.set(guid, queue);
     }
-
-    if (!this.messageQueue.empty) {
-      await Stream.of(this.messageQueue)
-        .map((v: Blob) =>
-          Stream.of(this.streamQueue.values())
-            .map((queue: Queue<Blob>) => queue.push(v))
-            .execute()
-        )
-        .execute();
-    }
-
     return queue;
   }
 

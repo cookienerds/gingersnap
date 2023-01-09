@@ -7,7 +7,7 @@ export interface WaitPeriod {
   milliseconds?: number;
   hours?: number;
 }
-export const wait = (period: WaitPeriod | number) =>
+export const wait = (period: WaitPeriod | number, signal?: AbortSignal) =>
   new Future<void>((resolve, reject, signal) => {
     const totalTime =
       typeof period === "number"
@@ -21,4 +21,4 @@ export const wait = (period: WaitPeriod | number) =>
       clearTimeout(timer);
       reject(new TimeoutError());
     };
-  });
+  }, signal);

@@ -1,5 +1,5 @@
 import { Service } from "./service";
-import { BrowserWebSocket } from "../../utils/socket";
+import { StreamableWebSocket } from "../../utils/socket";
 import { ServiceInternalProps } from "./types";
 import * as R from "ramda";
 import CallExecutionError from "../../errors/CallExecutionError";
@@ -7,13 +7,14 @@ import { Stream } from "../../utils/stream";
 import ParsingError from "../../errors/ParsingError";
 import { DataFormat, Model } from "../model";
 import { FutureResult } from "../../utils/future";
+import { ExecutorState } from "../../utils";
 
 export class WebSocketService extends Service {
-  private readonly socket: BrowserWebSocket;
+  private readonly socket: StreamableWebSocket;
 
   constructor(...args: any[]) {
     super(...args);
-    this.socket = new BrowserWebSocket(this.baseUrl);
+    this.socket = new StreamableWebSocket(this.baseUrl);
   }
 
   /**
@@ -41,7 +42,6 @@ export class WebSocketService extends Service {
       ([_, v]) => (v.socketReadStream ?? v.socketWriteStream) !== undefined,
       R.toPairs(internals.methodConfig)
     );
-    const parentService = Object.getPrototypeOf(Object.getPrototypeOf(this));
     R.forEach(([key, config]) => {
       const oldMethod = this[key];
       const details = internals.methodConfig[key]?.socketReadStream;
@@ -50,12 +50,24 @@ export class WebSocketService extends Service {
       if (config.socketReadStream) {
         if (!details) throw new ParsingError([], "ReadStreamDetailsMissing");
         if (!config.responseClass) throw new ParsingError([], "ResponseTypeMissing");
+        let equalsChecker: any;
+
+        switch (typeof details.value) {
+          case "boolean":
+            equalsChecker = R.equals(new Boolean(details.value));
+            break;
+          case "string":
+            equalsChecker = R.equals(new String(details.value));
+            break;
+          case "number":
+            equalsChecker = R.equals(new Number(details.value));
+            break;
+          default:
+            if (details.value instanceof RegExp) equalsChecker = details.value.test;
+            else equalsChecker = R.equals(details.value);
+        }
         dataComparator = R.compose(
-          typeof details.value === "string"
-            ? R.equals(new String(details.value))
-            : details.value instanceof RegExp
-            ? details.value.test
-            : R.equals(details.value),
+          (v) => equalsChecker(v),
           R.view(
             typeof details.keyPath === "string" ? R.lensProp<any, any>(details.keyPath) : R.lensPath(details.keyPath)
           )
@@ -79,10 +91,15 @@ export class WebSocketService extends Service {
             if (result instanceof Promise) {
               await result;
             }
-          });
+            return null;
+          }).once();
         } else {
-          return this.socket.stream
+          let stream = this.socket.stream;
+          if (config.socketReadStream?.take !== undefined) stream = stream.take(config.socketReadStream.take);
+
+          return stream
             .map((data) => (config.responseClass as typeof Model).fromBlob(data, config.dataFormat ?? DataFormat.JSON))
+            .filter(R.complement(R.isNil))
             .flatten()
             .filter(dataComparator)
             .map(async (v) => {

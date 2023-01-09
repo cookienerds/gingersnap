@@ -4,7 +4,7 @@
     "noImplicitAny": false,
     "moduleResolution": "NodeNext",
     "preserveConstEnums": true,
-    "sourceMap": false,
+    "sourceMap": true,
     "strict": true,
     "declaration": true,
     "experimentalDecorators": true,
