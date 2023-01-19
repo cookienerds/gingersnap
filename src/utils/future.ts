@@ -150,7 +150,7 @@ export class Future<T> {
     return this.failureResult;
   }
 
-  get stream() {
+  get stream(): Stream<T> {
     return Stream.of(this);
   }
 

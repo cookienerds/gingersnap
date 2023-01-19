@@ -126,7 +126,7 @@ export class Stream<T> implements AsyncGenerator<T> {
     });
   }
 
-  get future() {
+  get future(): Future<T> {
     return Future.of<T>((resolve, reject, signal) => {
       if (!signal.aborted) {
         signal.onabort = () => this.cancel();
@@ -134,7 +134,7 @@ export class Stream<T> implements AsyncGenerator<T> {
           .then(resolve as any)
           .catch(reject);
       }
-    });
+    }) as Future<T>;
   }
 
   map<K>(callback: (v: T) => K | Promise<K> | Future<K> | Stream<K>): Stream<InferStreamResult<K>> {
