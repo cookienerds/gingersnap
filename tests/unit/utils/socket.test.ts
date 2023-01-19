@@ -1,8 +1,8 @@
 import WS from "jest-websocket-mock";
-import { wait } from "../../../src/utils/timer";
 import { StreamableWebSocket } from "../../../src/utils/socket";
 import NetworkError from "../../../src/errors/NetworkError";
 import { HTTPStatus } from "../../../src/annotations/service";
+import { Future } from "../../../src/utils";
 
 describe("Browser WebSocket", function () {
   const url = "ws://localhost.com";
@@ -24,21 +24,21 @@ describe("Browser WebSocket", function () {
     server.on("close", () => (closed = true));
 
     const socket = new StreamableWebSocket(url, { retryOnDisconnect: false });
-    await Promise.race([socket.open(), wait({ seconds: 1 })]).then(() => {
+    await Promise.race([socket.open(), Future.sleep({ seconds: 1 })]).then(() => {
       expect(connected).toBeTruthy();
     });
 
     socket.close();
-    await Promise.race([socket.awaitClosed(), wait({ seconds: 1 })]).then(() => {
+    await Promise.race([socket.closedFuture(), Future.sleep({ seconds: 1 })]).then(() => {
       expect(closed).toBeTruthy();
     });
   });
 
   it("should send messages", async () => {
     const socket = new StreamableWebSocket(url, { retryOnDisconnect: false });
-    await Promise.race([socket.open(), wait({ seconds: 1 })]);
+    await Future.waitFor(socket.open(), { seconds: 1 });
     socket.send("Hello");
-    await Promise.race([server.messagesToConsume.get(), wait({ seconds: 1 })]).then((result) => {
+    await Promise.race([server.messagesToConsume.get(), Future.sleep({ seconds: 1 })]).then((result) => {
       expect(result).toEqual("Hello");
     });
     socket.close();
@@ -48,7 +48,7 @@ describe("Browser WebSocket", function () {
     const socket = new StreamableWebSocket<Blob>(url, { retryOnDisconnect: false });
     const testMessages = ["Hello", "World", "Testing"];
 
-    await Promise.race([socket.open(), wait({ seconds: 1 })]);
+    await Future.waitFor(socket.open(), { seconds: 1 });
     testMessages.forEach((message) => server.send(message));
     const responseMessage = await socket.stream
       .map((v) => v.text())
@@ -63,33 +63,36 @@ describe("Browser WebSocket", function () {
     const socket = new StreamableWebSocket<Blob>(url, { retryOnDisconnect: false });
     const testMessages = ["Hello", "World", "Testing"];
 
-    await Promise.race([socket.open(), wait({ seconds: 1 })]);
+    await Future.waitFor(socket.open(), { seconds: 1 });
     testMessages.forEach((message) => server.send(message));
 
-    void wait({ seconds: 1 }).then(() => socket.close());
+    void Future.sleep({ seconds: 1 })
+      .thenApply(() => socket.close())
+      .schedule();
     const responseMessage = await socket.stream.map(async (v) => await v.text()).collect();
 
     expect(responseMessage).toEqual(testMessages);
     socket.close();
   });
 
-  it("should fail to connect", async () => {
-    const socket = new StreamableWebSocket<Blob>(url2, { retryOnDisconnect: false });
-    await expect(Promise.race([socket.open(), wait({ seconds: 1 })])).rejects.toEqual(
-      new NetworkError(HTTPStatus.EXPECTATION_FAILED)
-    );
-  });
-
   it("should retry connection", async () => {
     const socket = new StreamableWebSocket<Blob>(url2);
-    await Promise.race([socket.open(), wait({ seconds: 1 })]);
+    void socket.open().schedule();
+    await Future.sleep({ seconds: 1 });
     expect(socket.opened).toBeFalsy();
     const server2 = new WS(url2);
     try {
-      await Promise.race([socket.open(), wait({ seconds: 1 })]);
+      await Future.waitFor(socket.open(), { seconds: 1 });
       expect(socket.opened).toBeTruthy();
     } finally {
       server2.close();
     }
+  });
+
+  it("should fail to connect", async () => {
+    const socket = new StreamableWebSocket<Blob>(url2, { retryOnDisconnect: false });
+    await expect(Future.waitFor(socket.open(), { seconds: 5 }).run()).rejects.toEqual(
+      new NetworkError(HTTPStatus.EXPECTATION_FAILED)
+    );
   });
 });

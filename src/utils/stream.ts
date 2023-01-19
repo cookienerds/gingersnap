@@ -1,9 +1,8 @@
 import CallExecutionError from "../errors/CallExecutionError";
 import StreamEnded from "../errors/StreamEnded";
-import { wait, WaitPeriod } from "./timer";
 import * as R from "ramda";
 import { AnyDataType, Flattened, InferErrorResult, InferStreamResult } from "./types";
-import { Future, FutureResult } from "./future";
+import { Future, FutureResult, WaitPeriod } from "./future";
 import FutureCancelled from "../errors/FutureCancelled";
 import { ExecutorState } from "./state";
 
@@ -27,7 +26,7 @@ interface LimitResult<T> {
   done: boolean;
 }
 type ActionFunctor<T> = (v: T) => T | null | Promise<T> | LimitResult<T> | Promise<LimitResult<T>> | Stream<T>;
-export type Executor = (v: AbortSignal) => Promise<AnyDataType> | AnyDataType | ExecutorState<AnyDataType>;
+export type Executor = (v: AbortSignal) => Promise<any> | Future<any> | AnyDataType | ExecutorState<any>;
 
 export class Stream<T> implements AsyncGenerator<T> {
   protected executed: boolean;
@@ -72,9 +71,9 @@ export class Stream<T> implements AsyncGenerator<T> {
 
       if (futures.length > 0) {
         const result = await Promise.race(
-          futures.map((future, index) => future.then((v) => [v.value, index] as [any, number]))
+          futures.map((future, index) => future.thenApply((v) => [v.value, index] as [any, number]))
         );
-        const [value, index] = result.value;
+        const [value, index] = result;
         // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
         delete futures[index];
         return value;
@@ -245,13 +244,15 @@ export class Stream<T> implements AsyncGenerator<T> {
 
   throttleBy(period: WaitPeriod) {
     const newStream = this.clone();
-    let future: Future<void> | undefined;
+    let future: Future<undefined> | undefined;
 
     newStream.actions.push({
       type: ActionType.TRANSFORM,
       functor: (value) => {
         if (!future) {
-          future = wait(period).then(() => (future = undefined));
+          future = Future.sleep(period)
+            .thenApply(() => (future = undefined))
+            .schedule();
           return value;
         }
         return null;
@@ -399,6 +400,7 @@ export class Stream<T> implements AsyncGenerator<T> {
         } else if (this.canRunExecutor) {
           data = this.executor(this.controller.signal);
           if (data instanceof Future) data = (await data).value;
+          if (data instanceof FutureResult) data = data.value;
           if (data instanceof Promise) data = await data;
           if (data instanceof ExecutorState) {
             this.canRunExecutor = !data.done;
@@ -420,10 +422,10 @@ export class Stream<T> implements AsyncGenerator<T> {
         const { type, functor } = this.actions[i];
         switch (type) {
           case ActionType.FILTER: {
-            const preResult = preProcessor(data);
-            let result = functor(preResult instanceof Promise ? await preResult : preResult);
-
-            if (result instanceof Promise) result = await result;
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            );
             if (result === null || result === undefined) {
               return { state: State.CONTINUE };
             }
@@ -431,10 +433,11 @@ export class Stream<T> implements AsyncGenerator<T> {
             break;
           }
           case ActionType.TRANSFORM: {
-            const preResult = preProcessor(data);
-            let result = functor(preResult instanceof Promise ? await preResult : preResult);
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            );
 
-            if (result instanceof Promise) result = await result;
             if (result instanceof Stream) {
               this.backlog = [{ actionIndex: i + 1, records: result }, ...this.backlog];
               return { state: State.CONTINUE };
@@ -443,10 +446,11 @@ export class Stream<T> implements AsyncGenerator<T> {
             break;
           }
           case ActionType.PACK: {
-            const preResult = preProcessor(data);
-            let result = functor(preResult instanceof Promise ? await preResult : preResult) as LimitResult<T>;
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = (await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            )) as LimitResult<T>;
 
-            if (result instanceof Promise) result = await result;
             if (!result.done) {
               return { state: State.CONTINUE };
             }
@@ -454,10 +458,11 @@ export class Stream<T> implements AsyncGenerator<T> {
             break;
           }
           case ActionType.LIMIT: {
-            const preResult = preProcessor(data);
-            let result = functor(preResult instanceof Promise ? await preResult : preResult) as LimitResult<T>;
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = (await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            )) as LimitResult<T>;
 
-            if (result instanceof Promise) result = await result;
             if (result.done) {
               this.canRunExecutor = false;
               this.backlog = [];
@@ -468,10 +473,11 @@ export class Stream<T> implements AsyncGenerator<T> {
             break;
           }
           case ActionType.UNPACK: {
-            const preResult = preProcessor(data);
-            let result = functor(preResult instanceof Promise ? await preResult : preResult) as T[];
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = (await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            )) as T[];
 
-            if (result instanceof Promise) result = await result;
             if (result.length === 0) {
               return { state: State.CONTINUE };
             } else if (result.length === 1) {
@@ -509,9 +515,16 @@ export class Stream<T> implements AsyncGenerator<T> {
     if (!catchAction) throw error;
     try {
       const value = catchAction.functor(errorMessage as any);
-      return [value instanceof Promise ? await value : value, i];
+      return [await this.yieldTrueResult(value), i];
     } catch (e) {
       return await this.processError(e, i);
     }
+  }
+
+  private async yieldTrueResult(value: any) {
+    if (value instanceof Future) value = (await value).value;
+    if (value instanceof FutureResult) value = value.value;
+    if (value instanceof Promise) value = await value;
+    return value;
   }
 }

@@ -119,7 +119,7 @@ describe("Test Network Service", function () {
     expect(profile.bestie).toBeDefined();
     expect(String(profile.bestie?.name)).toEqual("Sandy Carter");
     expect(String(profile.profilePicture)).toEqual("picture.jpeg");
-    expect(String(profile.bioLink)).toEqual(`https://wiki.com/${encodeURI(profile.name.toString())}`);
+    expect(String(profile.bioLink)).toEqual(`https://wiki.com/${encodeURI(profile.name)}`);
   });
 
   it("should create user", async () => {
@@ -223,10 +223,10 @@ describe("Test Network Service", function () {
 
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
     const service = snap.create(UtilService);
-    const resp: String = await service.healthCheck().execute();
+    const resp: string = await service.healthCheck().execute();
 
-    expect(resp instanceof String).toBeTruthy();
-    expect(resp.toString()).toEqual("Ok");
+    expect(typeof resp === "string").toBeTruthy();
+    expect(resp).toEqual("Ok");
   });
 
   it("should get binary data response", async () => {
@@ -345,7 +345,7 @@ describe("Test Network Service", function () {
     const resp = await service.healthCheck().execute();
     const end = performance.now();
     expect(end - start).toBeGreaterThanOrEqual(THROTTLE_DEFAULT_MS * 3);
-    expect(resp.toString()).toBe("check");
+    expect(resp).toBe("check");
     expect(called).toBe(4);
   });
 
@@ -356,8 +356,8 @@ describe("Test Network Service", function () {
     const snap = new GingerSnap({ baseUrl: "https://test.com" });
     const service = snap.create(AuthService);
     const resp = await service.loginWithEmailAndPassword("test@test.com").execute();
-    expect(resp.accessToken.toString()).toBe("jwt");
-    expect(resp.refreshToken?.toString()).toBe("jwt-refresh");
+    expect(resp.accessToken).toBe("jwt");
+    expect(resp.refreshToken).toBe("jwt-refresh");
   });
 
   it("should create model class/field plugins", () => {
@@ -371,7 +371,7 @@ describe("Test Network Service", function () {
         expect(tagName).toEqual("CustomFieldTag");
         expect(properties).toEqual({ test2: true });
         expect(fieldName).toEqual("test");
-        expect((target as any).test.toString()).toEqual("custom test");
+        expect((target as any).test).toEqual("custom test");
       }
     );
 

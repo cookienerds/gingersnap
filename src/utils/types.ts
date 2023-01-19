@@ -1,4 +1,4 @@
-import { WaitableObject, WatchableObject } from "./object";
+import { WaitableObject, WatchableObject } from "../data-structures/object";
 import { Stream } from "./stream";
 
 export interface ObjectOf<T> {
@@ -28,8 +28,8 @@ export type AnyDataType =
   | Date
   | RegExp
   | Map<any, any>
-  | WaitableObject
-  | WatchableObject
+  | WaitableObject<any, any>
+  | WatchableObject<any, any>
   | boolean[]
   | File
   | File[];

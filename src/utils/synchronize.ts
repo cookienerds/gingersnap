@@ -1,9 +1,8 @@
-import { Future } from "./future";
-import { WaitPeriod } from "./timer";
-import { WaitableObject } from "./object";
+import { Future, WaitPeriod } from "./future";
+import { WaitableObject } from "../data-structures/object";
 
 export class FutureEvent {
-  private readonly __internal__: WaitableObject;
+  private readonly __internal__: WaitableObject<any, any>;
 
   constructor() {
     this.__internal__ = new WaitableObject();
@@ -50,7 +49,7 @@ export class Lock {
 
   public acquire(waitPeriod?: WaitPeriod): Future<Lock> {
     if (this.locked) {
-      return this.evt.wait(waitPeriod).then(() => {
+      return this.evt.wait(waitPeriod).thenApply(() => {
         if (this.locked) return this.acquire(waitPeriod);
         return this.reEntrantLock() as any;
       });

@@ -22,9 +22,9 @@ import { ArrayField, Field, Ignore, Model } from "../../src/annotations/model";
 import "reflect-metadata";
 
 export class User extends Model {
-  @Field() name!: String;
+  @Field() name!: string;
   @ArrayField(User) friends!: User[];
-  @Field("contact_no") tel!: String;
+  @Field("contact_no") tel!: string;
   @Field("timestamp") createdOn!: Date;
 
   @Ignore()

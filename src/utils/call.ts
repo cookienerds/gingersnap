@@ -3,7 +3,6 @@ import CallExecutionError from "../errors/CallExecutionError";
 import { Model } from "../annotations/model/model";
 import MissingArgumentsError from "../errors/MissingArgumentsError";
 import { DataFormat } from "../annotations/model";
-import StreamEnded from "../errors/StreamEnded";
 import { Executor, State, Stream } from "./stream";
 import { ExecutorState } from "./state";
 
@@ -87,7 +86,7 @@ export class Callable<T extends Model | Model[] | String | String[] | Blob | Blo
       }
       case ResponseType.STRING: {
         const result = await resp.text();
-        return new String(result) as T;
+        return String(result) as unknown as T;
       }
       case ResponseType.XML: {
         if (this.ModelClass?.name === String.name) {

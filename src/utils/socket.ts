@@ -1,17 +1,17 @@
 import NetworkError from "../errors/NetworkError";
 import { HTTPStatus } from "../annotations/service";
 import { Stream } from "./stream";
-import { Queue } from "./object/Queue";
-import { wait } from "./timer";
+import { Queue } from "../data-structures/object/Queue";
 import { v4 as uuid } from "uuid";
 import StreamEnded from "../errors/StreamEnded";
+import { Future, WaitPeriod } from "./future";
 
 type SocketFunctor<T extends CloseEvent | Event | MessageEvent> = (this: WebSocket, evt: T) => any;
 
 interface WebSocketConfiguration {
   retryOnDisconnect?: boolean;
   cacheSize?: number;
-  cacheExpiryMs?: number;
+  cacheExpiryPeriod?: WaitPeriod;
   exponentialFactor?: number;
   backoffPeriodMs?: number;
 }
@@ -21,12 +21,12 @@ interface WebSocketConfiguration {
  */
 export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
   private readonly retryOnDisconnect: boolean;
-  private openPromise?: Promise<void>;
-  private closePromise?: Promise<void>;
+  private openFuture?: Future<void>;
+  private closeFuture?: Future<void>;
 
   private socketListeners: Array<[keyof WebSocketEventMap, SocketFunctor<any>]>;
 
-  private closePromiseCallbacks!: [() => void, (reason?: any) => void];
+  private closeFutureCallbacks!: [() => void, (reason?: any) => void, AbortSignal];
 
   private readonly messageQueue: Queue<Blob>;
   private readonly streamQueue: Map<string, Queue<Blob>>;
@@ -46,7 +46,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
 
   constructor(
     url: string,
-    { retryOnDisconnect, cacheSize, cacheExpiryMs, exponentialFactor, backoffPeriodMs }: WebSocketConfiguration = {}
+    { retryOnDisconnect, cacheSize, cacheExpiryPeriod, exponentialFactor, backoffPeriodMs }: WebSocketConfiguration = {}
   ) {
     this.socketListeners = [];
     this.url = url;
@@ -56,7 +56,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
     this.exponentialFactor = exponentialFactor ?? 2;
     this.backoffPeriodMs = backoffPeriodMs ?? 10;
     this.backoffPeriods = -1;
-    this.messageQueue = new Queue<Blob>(this.cacheSize, cacheExpiryMs ?? 60000);
+    this.messageQueue = new Queue<Blob>(this.cacheSize, cacheExpiryPeriod ?? { seconds: 60 });
     this.streamQueue = new Map<string, Queue<Blob>>();
   }
 
@@ -71,18 +71,21 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
   /**
    * opens the current web socket connection
    */
-  async open() {
-    if (!this.openPromise) {
-      this.closePromise = new Promise((resolve, reject) => {
-        this.closePromiseCallbacks = [resolve, reject];
-      });
-      this.openPromise = new Promise<void>((resolve, reject) => {
+  open() {
+    if (!this.openFuture || this.openFuture?.failed) {
+      this.closeFuture = new Future<void>((resolve, reject, signal) => {
+        this.closeFutureCallbacks = [resolve, reject, signal];
+      }).schedule();
+      this.openFuture = new Future<void>((resolve, reject, signal) => {
+        signal.onabort = () => {
+          this.close();
+        };
         let retrying = false;
         const cancelError = this.addEventListener("error", async () => {
-          if (this.retryOnDisconnect) {
+          if (this.retryOnDisconnect && !signal.aborted) {
             retrying = true;
             this.getSocket()?.close();
-            await wait({
+            await Future.sleep({
               milliseconds: this.backoffPeriodMs * Math.pow(this.exponentialFactor, ++this.backoffPeriods),
             });
             this.createSocket();
@@ -103,15 +106,17 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
         });
         const cancelClose = this.addEventListener("close", () => {
           if (retrying) return;
-          if (!this.manuallyClosed && this.retryOnDisconnect) {
-            delete this.openPromise;
+          if (!this.manuallyClosed && this.retryOnDisconnect && !signal.aborted) {
+            delete this.openFuture;
             cancelError();
             cancelOpen();
             cancelClose();
-            this.open().then(resolve).catch(reject);
+            this.open()
+              .thenApply(() => resolve())
+              .catch(reject);
           } else {
             retrying = false;
-            this.closePromiseCallbacks[0]();
+            this.closeFutureCallbacks[0]();
             cancelQueue();
             reject(new NetworkError(HTTPStatus.EXPECTATION_FAILED));
           }
@@ -120,16 +125,16 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
           const data = typeof evt.data === "string" ? new Blob([evt.data]) : evt.data;
           if (this.streamQueue.size > 0) {
             this.loadBackfilledMessages();
-            for (const queue of this.streamQueue.values()) queue.push(data);
+            for (const queue of this.streamQueue.values()) queue.enqueue(data);
           } else {
-            this.messageQueue.push(data);
+            this.messageQueue.enqueue(data);
           }
         });
         this.createSocket();
       });
     }
 
-    await this.openPromise;
+    return this.openFuture;
   }
 
   /**
@@ -137,8 +142,9 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
    * @remark
    * This doesn't actually attempt to close the socket, only waits for the connection to close
    */
-  async awaitClosed() {
-    if (this.closePromise) return await this.closePromise;
+  closedFuture() {
+    if (this.closeFuture) return this.closeFuture;
+    throw new NetworkError(HTTPStatus.FORBIDDEN, "Stream not opened");
   }
 
   /**
@@ -148,7 +154,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
     this.manuallyClosed = true;
     this.getSocket()?.close();
     this.streamQueue.clear();
-    this.messageQueue.close();
+    this.messageQueue.clear();
   }
 
   /**
@@ -166,7 +172,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
     const guid = uuid();
     return new Stream<T>(async (signal) => {
       if (!this.closed) {
-        const value = await Promise.race([(await this.getQueue(guid)).awaitPop(signal), this.awaitClosed()]);
+        const value = await Promise.race([(await this.getQueue(guid)).awaitDequeue(signal), this.closedFuture()]);
         if (value) return value;
         else this.removeQueue(guid);
       }
@@ -190,9 +196,9 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
 
   private loadBackfilledMessages() {
     while (!this.messageQueue.empty) {
-      const data = this.messageQueue.pop();
+      const data = this.messageQueue.dequeue();
       for (const queue of this.streamQueue.values()) {
-        queue.push(data);
+        queue.enqueue(data);
       }
     }
   }

@@ -130,7 +130,11 @@ export class Model {
     }
   ): Promise<T | T[]> {
     const fetcher = fetch;
-    const resp = await fetcher(source, { method: "GET", headers: options?.requestHeaders, mode: options?.mode });
+    const resp = await fetcher(source, {
+      method: "GET",
+      headers: options?.requestHeaders,
+      mode: options?.mode,
+    });
     if (!resp.ok) throw new NetworkError(resp.status);
     return await this.fromBlob<T>(await resp.blob(), format, options);
   }
@@ -173,7 +177,10 @@ export class Model {
         let text = data;
         if (options?.headers) text = options.headers.join(options?.delimiter ?? ",") + (options.newline ?? "\n") + text;
 
-        const result = Papa.parse<T>(text, { header: true, skipEmptyLines: true });
+        const result = Papa.parse<T>(text, {
+          header: true,
+          skipEmptyLines: true,
+        });
 
         if (!options?.ignoreErrors && result.errors.length > 0) throw new ParsingError(result.errors);
         if (!options?.array && result.data.length > 0) throw new ParsingError([], "Too many records found");
@@ -369,6 +376,32 @@ export class Model {
         model[fieldProps.name] = value.map((v) => new fieldProps.Type(v));
       } else if (model[fieldProps.name] instanceof fieldProps.Type && fieldProps.Type instanceof Function) {
         model[fieldProps.name](value);
+      } else if (fieldProps.Type?.name === "String") {
+        model[fieldProps.name] = String(value);
+      } else if (fieldProps.Type?.name === "Boolean") {
+        model[fieldProps.name] = Boolean(value);
+      } else if (fieldProps.Type?.name === "Number") {
+        model[fieldProps.name] = Number(value);
+      } else if (fieldProps.Type?.name === "Map") {
+        const valueType = typeof value;
+        switch (valueType) {
+          case "object": {
+            model[fieldProps.name] = value instanceof Array ? new Map(value) : new Map(Object.entries(value));
+            break;
+          }
+          case "string":
+            model[fieldProps.name] = new Map(JSON.parse(value));
+            break;
+          default:
+            throw new ParsingError([value], `value for ${key} cannot be converted to a Map`);
+        }
+      } else if (fieldProps.Type?.name === "Set") {
+        if (value instanceof Array) {
+          model[fieldProps.name] = new Set(value);
+        } else if (typeof value === "string") {
+          model[fieldProps.name] = new Set(JSON.parse(value));
+        }
+        throw new ParsingError([value], `value for ${key} cannot be converted to a Set`);
       } else {
         model[fieldProps.name] = new fieldProps.Type(value);
       }
@@ -400,7 +433,10 @@ export class Model {
 
         R.forEach(([k, v]) => {
           const schemaDetails = v.schema;
-          const field: any = { name: k, type: "" as any };
+          const field: any = {
+            name: k,
+            type: "" as any,
+          };
           const name = className + k.charAt(0).toUpperCase() + k.substring(1);
 
           if (!schemaDetails) return;
@@ -443,15 +479,17 @@ export class Model {
                   name,
                 };
                 const visited = visitedRecords.get(schemaDetails.options.recordClass.constructor.name);
-                if (visited)
+                if (visited) {
                   field.type.items = {
                     type: DataType.RECORD,
                     name: name + "Record",
                     fields: visited,
                   };
-                else field.type.items = schemaDetails.options.recordClass.schemaWithCache(format, visitedRecords);
+                } else {
+                  field.type.items = schemaDetails.options.recordClass.schemaWithCache(format, visitedRecords);
+                }
                 visitedRecords.set(schemaDetails.options.recordClass.constructor.name, field.type.items.fields);
-              } else
+              } else {
                 field.type = {
                   type: schemaDetails.options?.optional ? [DataType.NULL, DataType.ARRAY] : DataType.ARRAY,
                   items: schemaDetails.options?.itemType ?? "",
@@ -459,19 +497,23 @@ export class Model {
                   default: [],
                   name,
                 };
+              }
               break;
             }
             case DataType.RECORD: {
-              if (!schemaDetails.options?.recordClass)
+              if (!schemaDetails.options?.recordClass) {
                 throw new InvalidValue("class description for record type is missing");
+              }
               const visited = visitedRecords.get(schemaDetails.options.recordClass.constructor.name);
-              if (visited)
+              if (visited) {
                 field.type = {
                   type: schemaDetails.options?.optional ? [DataType.NULL, DataType.RECORD] : DataType.RECORD,
                   name,
                   fields: visited,
                 };
-              else field.type = schemaDetails.options.recordClass.schemaWithCache(format, visitedRecords);
+              } else {
+                field.type = schemaDetails.options.recordClass.schemaWithCache(format, visitedRecords);
+              }
               visitedRecords.set(schemaDetails.options.recordClass.constructor.name, field.type.fields);
               break;
             }

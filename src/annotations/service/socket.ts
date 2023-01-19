@@ -29,7 +29,7 @@ export class WebSocketService extends Service {
   async shutdown() {
     this.socket.close();
     this.onceConnectionClosed();
-    await this.socket.awaitClosed();
+    await this.socket.closedFuture();
   }
 
   async ready() {
@@ -54,13 +54,13 @@ export class WebSocketService extends Service {
 
         switch (typeof details.value) {
           case "boolean":
-            equalsChecker = R.equals(new Boolean(details.value));
+            equalsChecker = R.equals(Boolean(details.value));
             break;
           case "string":
-            equalsChecker = R.equals(new String(details.value));
+            equalsChecker = R.equals(String(details.value));
             break;
           case "number":
-            equalsChecker = R.equals(new Number(details.value));
+            equalsChecker = R.equals(Number(details.value));
             break;
           default:
             if (details.value instanceof RegExp) equalsChecker = details.value.test;

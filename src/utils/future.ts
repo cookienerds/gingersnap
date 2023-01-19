@@ -1,16 +1,20 @@
 import FutureCancelled from "../errors/FutureCancelled";
 import FutureError from "../errors/FutureError";
-import { wait, WaitPeriod } from "./timer";
 import TimeoutError from "../errors/TimeoutError";
 import InvalidValue from "../errors/InvalidValue";
 import * as R from "ramda";
 import { clearTimeout } from "timers";
 import { Stream } from "./stream";
+import { SimpleQueue } from "../data-structures/object/SimpleQueue";
 
 type Resolve<T> = (value: T | PromiseLike<T>) => any;
 type Reject = (reason?: FutureError) => void;
 type Executor<T> = (resolve: Resolve<T>, reject: Reject, signal: AbortSignal) => void | Promise<void>;
-type InferredFutureResult<T> = T extends FutureResult<infer U> ? U : T;
+type InferredFutureResult<T> = T extends FutureResult<infer U>
+  ? InferredFutureResult<U>
+  : T extends Promise<infer U>
+  ? InferredFutureResult<U>
+  : T;
 
 export class FutureResult<T> {
   readonly value: T;
@@ -22,28 +26,286 @@ export class FutureResult<T> {
   }
 }
 
-export class Future<T> extends Promise<FutureResult<T>> {
-  private readonly signals: Set<AbortSignal>;
+export interface WaitPeriod {
+  minutes?: number;
+  seconds?: number;
+  milliseconds?: number;
+  hours?: number;
+}
+
+export class Future<T> {
+  private signals: Set<AbortSignal>;
 
   private signalRegisteredCallback?: (v: AbortSignal) => void;
 
-  private readonly defaultSignal: AbortSignal;
+  private defaultSignal: AbortSignal;
 
   private fulfilled: boolean;
 
-  constructor(executor: Executor<T>, signal?: AbortSignal) {
-    let done = false;
-    let callback: (() => any) | undefined;
+  private isRunning: boolean;
 
-    super((resolve, reject) => {
-      const execute = function (this: Future<T>) {
+  private readonly executor: Executor<T>;
+
+  private completedResult?: T;
+
+  private failureResult?: Error;
+
+  private underLyingPromise?: Promise<T>;
+
+  private processors: SimpleQueue<{ success?: (v: FutureResult<T>) => any; failure?: (v: Error) => any }>;
+
+  constructor(executor: Executor<T>, signal?: AbortSignal) {
+    this.executor = executor;
+    this.defaultSignal = signal ?? new AbortController().signal;
+    this.signals = new Set<AbortSignal>([this.defaultSignal]);
+    this.fulfilled = false;
+    this.isRunning = false;
+    this.processors = new SimpleQueue();
+  }
+
+  public static of<K>(
+    value: Promise<InferredFutureResult<K>> | Future<InferredFutureResult<K>> | K | Executor<InferredFutureResult<K>>,
+    signal?: AbortSignal
+  ): Future<InferredFutureResult<K>> {
+    if (value instanceof Promise) {
+      return new Future((resolve, reject) => {
+        value.then(resolve as any).catch((error) => {
+          if (error instanceof FutureError) reject(error);
+          reject(new FutureError(error));
+        });
+      }, signal);
+    } else if (value instanceof Future) {
+      return value;
+    } else if (value instanceof Function) {
+      return new Future<InferredFutureResult<K>>(value);
+    } else {
+      return Future.completed(value) as Future<InferredFutureResult<K>>;
+    }
+  }
+
+  public static waitFor<K>(value: Future<K>, timeout: WaitPeriod | number) {
+    const timeableFuture = Future.sleep(timeout).catch(() => {});
+    return Future.of<K>((resolve, reject, signal) => {
+      timeableFuture.registerSignal(signal);
+      Promise.race([timeableFuture, value.run()])
+        .then((v) => {
+          if (value.done) {
+            timeableFuture.cancel();
+            resolve(v as any);
+            return;
+          }
+          value.cancel();
+          reject(new TimeoutError());
+        })
+        .catch((error) => {
+          if (!timeableFuture.failed) {
+            timeableFuture.cancel();
+          }
+          reject(error);
+        });
+    }, value.defaultSignal);
+  }
+
+  public static sleep(period: WaitPeriod | number, signal?: AbortSignal) {
+    return new Future<void>((resolve, reject, futureSignal) => {
+      const totalTime =
+        typeof period === "number"
+          ? period * 1000
+          : (period.hours ?? 0) * 60 * 60 * 1000 +
+            (period.minutes ?? 0) * 60 * 1000 +
+            (period.seconds ?? 0) * 1000 +
+            (period.milliseconds ?? 0);
+      const timer = setTimeout(resolve, totalTime);
+      futureSignal.onabort = () => {
+        clearTimeout(timer);
+        reject(new FutureCancelled());
+      };
+    }, signal);
+  }
+
+  public static completed<T>(value: T) {
+    if (value instanceof FutureResult) {
+      return new Future<T>((resolve) => resolve(value.value));
+    }
+    return new Future<T>((resolve) => resolve(value));
+  }
+
+  get done() {
+    return this.fulfilled;
+  }
+
+  get failed() {
+    return this.error instanceof Error;
+  }
+
+  get result() {
+    return this.completedResult;
+  }
+
+  get running() {
+    return this.isRunning;
+  }
+
+  get error() {
+    return this.failureResult;
+  }
+
+  get stream() {
+    return Stream.of(this);
+  }
+
+  public schedule() {
+    void this.run();
+    return this;
+  }
+
+  public run() {
+    return this.__run__();
+  }
+
+  public registerSignal(signal: AbortSignal) {
+    if (!this.done && !this.failed) {
+      this.signals.add(signal);
+      if (this.signalRegisteredCallback) this.signalRegisteredCallback(signal);
+    }
+  }
+
+  public unregisterSignal(signal: AbortSignal) {
+    if (signal === this.defaultSignal) throw new InvalidValue("Cannot deregister default signal");
+    this.signals.delete(signal);
+  }
+
+  public cancel() {
+    if (!this.done && !this.failed) {
+      this.cancelWithSignal(this.defaultSignal);
+    }
+  }
+
+  thenApply<K>(callback: (value: FutureResult<T>) => K): Future<InferredFutureResult<K>> {
+    const newFuture = this.clone() as Future<InferredFutureResult<K>>;
+    newFuture.processors.enqueue({ success: callback as any });
+    return newFuture;
+  }
+
+  catch<K>(callback: (reason: Error) => K): Future<InferredFutureResult<T | K>> {
+    const newFuture = this.clone() as Future<InferredFutureResult<K>>;
+    newFuture.processors.enqueue({ failure: callback });
+    return newFuture as unknown as Future<InferredFutureResult<T | K>>;
+  }
+
+  /**
+   * Internal. Only to be called by the internal JS runtime during await
+   * @private
+   */
+  private then(onFulfilled: (v: T) => void, onRejected: (reason: unknown) => void) {
+    return this.__run__(onFulfilled, onRejected);
+  }
+
+  private __run__(onFulfilled?: (v: T) => void, onRejected?: (reason: unknown) => void): Promise<T> {
+    if (this.underLyingPromise) {
+      return this.underLyingPromise
+        .then((v) => {
+          onFulfilled?.(v);
+          return v;
+        })
+        .catch((error) => {
+          if (!(error instanceof Error)) {
+            error = new FutureError(error);
+          }
+          onRejected?.(error);
+          throw error;
+        });
+    }
+
+    this.isRunning = true;
+    const resolvePromise: (v: Promise<T>) => Promise<any> = (promise: Promise<T>) => {
+      return promise
+        .then(async (result) => {
+          while (!this.processors.empty) {
+            const { success } = this.processors.dequeue()!;
+            if (!success) continue;
+
+            try {
+              result = await this.postResultProcessing(success(new FutureResult(result, this.defaultSignal)));
+            } catch (error: unknown) {
+              const handler = this.findFailureHandler();
+              if (!handler) throw new FutureError(String(error));
+              result = await this.postResultProcessing(
+                handler(error instanceof Error ? error : new Error(String(error)))
+              );
+            }
+          }
+          return result;
+        })
+        .then((v) => {
+          onFulfilled?.(v);
+          return v;
+        })
+        .catch(async (error) => {
+          const handler = this.findFailureHandler();
+          if (!handler) {
+            if (!(error instanceof Error)) {
+              error = new FutureError(error);
+            }
+            onRejected?.(error);
+            throw error;
+          }
+
+          try {
+            const result = await this.postResultProcessing(handler(error));
+            return await resolvePromise(Promise.resolve(result));
+          } catch (e) {
+            onRejected?.(e);
+            throw e;
+          }
+        });
+    };
+    this.underLyingPromise = resolvePromise(
+      new Promise<T>((resolve, reject) => {
+        if (Array.from(this.signals).some((v) => v.aborted)) {
+          reject(new FutureCancelled());
+          return;
+        }
+
         let rejected = false;
         const timeouts: any[] = [];
+        const abort = R.once(() => this.cancelWithSignal(this.defaultSignal));
+        const resolver = (v: any) => {
+          if (v instanceof Promise) {
+            v.then((v) => {
+              this.fulfilled = true;
+              resolve(v);
+            }).catch(reject);
+          } else if (v instanceof Future) {
+            v.run()
+              .then((v) => {
+                this.fulfilled = true;
+                resolve(v);
+              })
+              .catch(reject);
+          } else if (v instanceof FutureResult) {
+            this.fulfilled = true;
+            resolve(v.value);
+          } else {
+            this.fulfilled = true;
+            resolve(v);
+          }
+        };
+        const rejecter = (reason: unknown) => {
+          rejected = true;
+          timeouts.forEach((v) => clearTimeout(v));
+          reject(reason);
+        };
 
-        if (Array.from(this.signals).some((v) => v.aborted)) return reject(new FutureCancelled());
-        const abortSignal = new AbortController().signal;
-        const abort = R.once(() => this.cancelWithSignal(abortSignal));
-
+        this.signalRegisteredCallback = (v) =>
+          v.addEventListener(
+            "abort",
+            () => {
+              abort();
+              if (!rejected) timeouts.push(setTimeout(() => reject(new FutureCancelled()), 1000));
+            },
+            { once: true }
+          );
         this.signals.forEach((v) => {
           v.addEventListener(
             "abort",
@@ -54,146 +316,58 @@ export class Future<T> extends Promise<FutureResult<T>> {
             { once: true }
           );
         });
-        this.signalRegisteredCallback = (v) =>
-          v.addEventListener(
-            "abort",
-            () => {
-              abort();
-              if (!rejected) timeouts.push(setTimeout(() => reject(new FutureCancelled()), 1000));
-            },
-            { once: true }
-          );
 
-        void executor(
-          (v) => {
-            if (v instanceof Promise)
-              v.then((v) => {
-                this.fulfilled = true;
-                resolve(new FutureResult(v, abortSignal));
-              }).catch(reject);
-            else if (v instanceof FutureResult) {
-              this.fulfilled = true;
-              resolve(v);
-            } else {
-              this.fulfilled = true;
-              resolve(new FutureResult(v as T, abortSignal));
-            }
-          },
-          (reason) => {
-            rejected = true;
-            timeouts.forEach((v) => clearTimeout(v));
-            reject(reason);
-          },
-          abortSignal
-        );
-      };
+        void this.executor(resolver, rejecter, this.defaultSignal);
+      })
+    )
+      .then((v) => {
+        this.completedResult = v;
+        return v;
+      })
+      .catch((e) => {
+        this.failureResult = e instanceof Error ? e : new Error(String(e));
+        throw e;
+      })
+      .finally(() => {
+        this.signals = new Set();
+        this.isRunning = false;
+      });
 
-      if (!done) callback = execute;
-      else void execute.bind(this)();
-    });
-
-    this.defaultSignal = signal ?? new AbortController().signal;
-    this.signals = new Set<AbortSignal>([this.defaultSignal]);
-    this.fulfilled = false;
-    this.cancel = this.cancel.bind(this);
-    done = true;
-    if (callback) callback.bind(this)();
-  }
-
-  get done() {
-    return this.fulfilled;
-  }
-
-  get stream() {
-    return Stream.of(this);
-  }
-
-  public registerSignal(signal: AbortSignal) {
-    this.signals.add(signal);
-    if (this.signalRegisteredCallback) this.signalRegisteredCallback(signal);
-  }
-
-  public deregisterSignal(signal: AbortSignal) {
-    if (signal === this.defaultSignal) throw new InvalidValue("Cannot deregister default signal");
-    this.signals.delete(signal);
-  }
-
-  public cancel() {
-    this.signals.forEach(this.cancelWithSignal);
+    return this.underLyingPromise;
   }
 
   private cancelWithSignal(signal: AbortSignal) {
-    signal.dispatchEvent(new CustomEvent("abort"));
+    if (!signal.aborted) {
+      signal.dispatchEvent(new CustomEvent("abort"));
+    }
   }
 
-  // @ts-expect-error
-  catch<TResult = never>(
-    onRejected?: ((reason: any) => PromiseLike<TResult> | TResult) | undefined | null
-  ): Future<InferredFutureResult<T | TResult>> {
-    return super.catch((error: any) => {
-      if (!onRejected) {
-        if (error instanceof FutureError) throw error;
-        throw new FutureError(error);
-      }
-
-      let result = onRejected(error);
-      if (result instanceof Promise) {
-        return result
-          .then((v) => {
-            if (v instanceof FutureResult) v = v.value;
-            return v as TResult | T;
-          })
-          .catch((error) => {
-            if (error instanceof FutureError) throw error;
-            throw new FutureError(error);
-          });
-      } else if (result instanceof FutureResult) {
-        result = result.value;
-      }
-      return result as TResult | T;
-    }) as Future<InferredFutureResult<T | TResult>>;
+  private findFailureHandler() {
+    while (!this.processors.empty) {
+      const { failure } = this.processors.dequeue()!;
+      if (failure) return failure;
+    }
   }
 
-  // @ts-expect-error
-  then<TResult1 = T, TResult2 = never>(
-    onFulfilled?: ((value: FutureResult<T>) => PromiseLike<TResult1> | TResult1) | undefined | null,
-    onRejected?: ((reason: any) => PromiseLike<TResult2> | TResult2) | undefined | null
-  ): Future<InferredFutureResult<TResult1 | TResult2>> {
-    return super.then(onFulfilled, onRejected) as unknown as Future<InferredFutureResult<TResult1 | TResult2>>;
+  private async postResultProcessing(result: any) {
+    if (result instanceof FutureResult) {
+      result = result.value;
+    } else if (result instanceof Future) {
+      result.registerSignal(this.defaultSignal);
+      result = await result.run();
+    } else if (result instanceof Promise) {
+      result = await result;
+    }
+
+    return result;
   }
 
-  public static of<K>(
-    value: Promise<InferredFutureResult<K>> | Future<InferredFutureResult<K>> | K | Executor<InferredFutureResult<K>>,
-    signal?: AbortSignal
-  ): Future<InferredFutureResult<K>> {
-    if (value instanceof Promise)
-      return new Future((resolve, reject) => {
-        value.then(resolve as any).catch((error) => {
-          if (error instanceof FutureError) reject(error);
-          reject(new FutureError(error));
-        });
-      }, signal ?? (value instanceof Future ? value.defaultSignal : undefined));
-    else if (value instanceof Function) return new Future<InferredFutureResult<K>>(value);
-    else return new Future((resolve) => resolve(value as any));
-  }
-
-  public static waitFor<K>(value: Future<K>, timeout: WaitPeriod | number) {
-    const timeableFuture = wait(timeout);
-    return Future.of<K>((resolve, reject, signal) => {
-      timeableFuture.registerSignal(signal);
-      void Promise.race([timeableFuture, value]).then((v) => {
-        if (value.done) {
-          timeableFuture.cancel();
-          resolve(v.value as any);
-          return;
-        }
-        value.cancel();
-        reject(new TimeoutError());
-      });
-    }, value.defaultSignal);
-  }
-
-  public static sleep(timeout: WaitPeriod | number) {
-    return wait(timeout);
+  public clone(): Future<T> {
+    const future = new Future(this.executor, this.defaultSignal);
+    future.signals = new Set(this.signals);
+    future.defaultSignal = this.defaultSignal;
+    future.processors = this.processors.clone();
+    future.fulfilled = this.fulfilled;
+    return future;
   }
 }
