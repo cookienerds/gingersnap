@@ -26,7 +26,7 @@ interface LimitResult<T> {
   done: boolean;
 }
 type ActionFunctor<T> = (v: T) => T | null | Promise<T> | LimitResult<T> | Promise<LimitResult<T>> | Stream<T>;
-export type Executor = (v: AbortSignal) => Promise<any> | Future<any> | AnyDataType | ExecutorState<any>;
+export type Executor = (v: AbortSignal) => Promise<any> | Future<any> | AnyDataType | ExecutorState<any> | Stream<any>;
 
 export class Stream<T> implements AsyncGenerator<T> {
   protected executed: boolean;
@@ -101,7 +101,7 @@ export class Stream<T> implements AsyncGenerator<T> {
       .filter(R.complement(R.isNil));
   }
 
-  static of<K>(value: Iterable<K> | AsyncGenerator<K> | AsyncGeneratorFunction | Future<K>) {
+  static of<K>(value: Iterable<K> | AsyncGenerator<K> | AsyncGeneratorFunction | Future<K>): Stream<K> {
     if (value[Symbol.iterator]) {
       const iterator = value[Symbol.iterator]();
       return new Stream<K>((signal) => {
