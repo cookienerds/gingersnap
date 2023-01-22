@@ -83,18 +83,25 @@ export class Future<T> {
     }
   }
 
-  public static waitFor<K>(value: Future<K>, timeout: WaitPeriod | number) {
+  public static waitFor<K>(value: Future<K> | Promise<K>, timeout: WaitPeriod | number) {
+    let futureValue: Future<K>;
+    if (value instanceof Promise) {
+      futureValue = Future.of(value as any) as Future<K>;
+    } else {
+      futureValue = value;
+    }
+
     const timeableFuture = Future.sleep(timeout).catch(() => {});
     return Future.of<K>((resolve, reject, signal) => {
       timeableFuture.registerSignal(signal);
-      Promise.race([timeableFuture, value.run()])
+      Promise.race([timeableFuture, futureValue.run()])
         .then((v) => {
-          if (value.done) {
+          if (futureValue.done) {
             timeableFuture.cancel();
             resolve(v as any);
             return;
           }
-          value.cancel();
+          futureValue.cancel();
           reject(new TimeoutError());
         })
         .catch((error) => {
@@ -103,7 +110,7 @@ export class Future<T> {
           }
           reject(error);
         });
-    }, value.defaultSignal);
+    }, futureValue.defaultSignal);
   }
 
   public static sleep(period: WaitPeriod | number, signal?: AbortSignal) {
