@@ -377,7 +377,18 @@ export class Model {
         } else if (!(value instanceof Array) && xml) {
           value = [value];
         }
-        model[fieldProps.name] = value.map((v) => new fieldProps.Type(v));
+        model[fieldProps.name] = value.map((v) => {
+          switch (typeof v) {
+            case "boolean":
+            case "number":
+            case "bigint":
+            case "undefined":
+            case "string":
+              return v;
+            default:
+              return new fieldProps.Type(v);
+          }
+        });
       } else if (
         model[fieldProps.name] instanceof fieldProps.Type &&
         typeof model[fieldProps.name] === "function" &&
