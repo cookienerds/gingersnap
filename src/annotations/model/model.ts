@@ -217,10 +217,10 @@ export class Model {
   /**
    * Converts the current model to a JSON object
    */
-  public object(): { [string: string]: any } {
+  public object(removeMissingFields = false): { [string: string]: any } {
     const serialize = (value: any) => {
       if (value instanceof Model) {
-        return value.object();
+        return value.object(removeMissingFields);
       } else if (value instanceof Array) {
         return value.map((v) => serialize(v));
       }
@@ -232,7 +232,10 @@ export class Model {
         if (fieldProps.ignore?.serialize) return acc;
 
         const value: any = R.prop(fieldProps.name as any, this);
-        acc[key] = serialize(value);
+        const serializedValue = serialize(value);
+        if (!removeMissingFields || (serializedValue !== null && serializedValue !== undefined)) {
+          acc[key] = serializedValue;
+        }
         return acc;
       },
       {},
@@ -243,61 +246,62 @@ export class Model {
   /**
    * Converts the current model to a JSON string
    */
-  public json(): string {
-    return JSON.stringify(this.object());
+  public json(removeMissingFields = false): string {
+    return JSON.stringify(this.object(removeMissingFields));
   }
 
   /**
    * Converts the current model to an arraybuffer
    */
-  public buffer(): ArrayBuffer {
-    return new TextEncoder().encode(this.json());
+  public buffer(removeMissingFields = false): ArrayBuffer {
+    return new TextEncoder().encode(this.json(removeMissingFields));
   }
 
   /**
    * Converts the current model to a blob
    */
-  public blob(): Blob {
-    return new Blob([this.buffer()]);
+  public blob(removeMissingFields = false): Blob {
+    return new Blob([this.buffer(removeMissingFields)]);
   }
 
   /**
    * Converts the current model to an XML string
    */
-  public xml(): string {
-    return Model.__xmlParser__.js2xml(this.object());
+  public xml(removeMissingFields = false): string {
+    return Model.__xmlParser__.js2xml(this.object(removeMissingFields));
   }
 
   /**
    * Generates avro format for the data stored in the model
    */
-  public avro(): Buffer {
-    return avro.Type.forSchema(this.schema(DataFormat.AVRO)).toBuffer(this.object());
+  public avro(removeMissingFields = false): Buffer {
+    return avro.Type.forSchema(this.schema(DataFormat.AVRO)).toBuffer(this.object(removeMissingFields));
   }
 
   /**
    * Converts the current model to message pack binary format
    * @returns message pack binary
    */
-  public messagePack(): Buffer {
-    return msgPack(this.object()).buffer as Buffer;
+  public messagePack(removeMissingFields = false): Buffer {
+    return msgPack(this.object(removeMissingFields)).buffer as Buffer;
   }
 
   /**
    * Converts the current model to CBOR binary format
    * @returns cbor binary
    */
-  public cbor(): Buffer {
-    return cborEncode(this.object());
+  public cbor(removeMissingFields = false): Buffer {
+    return cborEncode(this.object(removeMissingFields));
   }
 
   /**
    * Converts the current model to csv format
+   * @param removeMissingFields
    * @param config CSV unparsing configuration
    * @returns csv string
    */
-  public csv(config?: Papa.UnparseConfig): string {
-    return Papa.unparse([this.object()], config);
+  public csv(removeMissingFields = false, config?: Papa.UnparseConfig): string {
+    return Papa.unparse([this.object(removeMissingFields)], config);
   }
 
   /**
