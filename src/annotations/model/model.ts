@@ -378,8 +378,6 @@ export class Model {
           value = [value];
         }
         model[fieldProps.name] = value.map((v) => new fieldProps.Type(v));
-      } else if (model[fieldProps.name] instanceof fieldProps.Type && fieldProps.Type instanceof Function) {
-        model[fieldProps.name](value);
       } else if (fieldProps.Type?.name === "String") {
         model[fieldProps.name] = String(value);
       } else if (fieldProps.Type?.name === "Boolean") {
