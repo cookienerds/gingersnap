@@ -347,18 +347,18 @@ export class Model {
     R.forEach(([key, fieldProps]: [string, FieldProps]) => {
       let value = data[key];
 
-      if (value === undefined) {
+      if (value === undefined || value === null) {
         for (const alias of fieldProps.aliases ?? []) {
           value = data[alias];
           if (value !== undefined) break;
         }
       }
 
-      if (value === undefined && fieldProps.ignore?.deserialize) {
+      if ((value === undefined || value === null) && fieldProps.ignore?.deserialize) {
         return;
-      } else if (value === undefined && (model[key] === undefined || model[key] === null)) {
+      } else if ((value === undefined || value === null) && (model[key] === undefined || model[key] === null)) {
         throw new ParsingError([], `Property ${key} is missing from the data provided`);
-      } else if (value === undefined && !(model[key] === undefined || model[key] === null)) {
+      } else if ((value === undefined || value === null) && !(model[key] === undefined || model[key] === null)) {
         return;
       }
 
