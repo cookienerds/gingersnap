@@ -6,6 +6,7 @@ import * as R from "ramda";
 import { clearTimeout } from "timers";
 import { Stream } from "./stream";
 import { SimpleQueue } from "../data-structures/object/SimpleQueue";
+import { InferStreamResult } from "./types";
 
 type Resolve<T> = (value: T | PromiseLike<T>) => any;
 type Reject = (reason?: FutureError) => void;
@@ -157,8 +158,8 @@ export class Future<T> {
     return this.failureResult;
   }
 
-  get stream(): Stream<T> {
-    return Stream.of(this);
+  get stream(): Stream<InferStreamResult<T>> {
+    return Stream.of(this) as Stream<InferStreamResult<T>>;
   }
 
   public schedule() {
