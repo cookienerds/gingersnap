@@ -223,6 +223,15 @@ export class Model {
         return value.object(removeMissingFields);
       } else if (value instanceof Array) {
         return value.map((v) => serialize(v));
+      } else if (value instanceof Set) {
+        return Array.from(value);
+      } else if (value instanceof Map) {
+        try {
+          return Object.fromEntries(value.entries());
+        } catch (e) {
+          // failed to serialize map to object, which means it contains keys that are not serializable to object
+          return value;
+        }
       }
       return value;
     };

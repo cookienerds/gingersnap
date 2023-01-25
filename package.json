@@ -1,6 +1,6 @@
 {
   "name": "@cookienerds/gingersnap",
-  "version": "3.0.17",
+  "version": "3.0.18",
   "description": "framework for handling network requests",
   "main": "dist/index.js",
   "module": "src/index.js",
