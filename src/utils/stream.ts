@@ -432,6 +432,10 @@ export class Stream<T> implements AsyncGenerator<T> {
           data = actionData;
         } else if (this.canRunExecutor) {
           data = this.executor(this.controller.signal);
+          if (data instanceof Stream) {
+            this.backlog.push({ actionIndex: 0, records: data });
+            return { state: State.CONTINUE };
+          }
           if (data instanceof Future) data = (await data).value;
           if (data instanceof FutureResult) data = data.value;
           if (data instanceof Promise) data = await data;
