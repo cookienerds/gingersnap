@@ -409,7 +409,8 @@ export class Model {
             break;
           }
           case "string":
-            model[fieldProps.name] = new Map(JSON.parse(value));
+            value = JSON.parse(value);
+            model[fieldProps.name] = value instanceof Array ? new Map(value) : new Map(Object.entries(value));
             break;
           default:
             throw new ParsingError([value], `value for ${key} cannot be converted to a Map`);
