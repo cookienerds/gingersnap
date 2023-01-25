@@ -62,7 +62,7 @@ export class Stream<T> implements AsyncGenerator<T> {
     this.backlog = [];
   }
 
-  public static asCompleted(futures: Array<Future<any>>, timeout: WaitPeriod | number) {
+  public static asCompleted(futures: Array<Future<any>>) {
     return new Stream(async (signal) => {
       signal.onabort = () => {
         futures.forEach((future) => future.cancel());
@@ -78,6 +78,39 @@ export class Stream<T> implements AsyncGenerator<T> {
         delete futures[index];
         return value;
       }
+    });
+  }
+
+  public static merge<K extends Array<Stream<any>>>(streams: K): Stream<InferStreamResult<K[0]>> {
+    const register = R.once(
+      (signal: AbortSignal) => (signal.onabort = () => streams.forEach((stream) => stream.cancel()))
+    );
+    const nextFutures: Array<Promise<[InferStreamResult<K[0]>, number]>> = new Array(streams.length);
+    let completed = -1;
+    return new Stream<InferStreamResult<K[0]>>((signal) => {
+      register(signal);
+      if (completed >= 0) {
+        nextFutures[completed] = streams[completed].next().then((v) => [v.value, completed]);
+      } else {
+        for (let i = 0; i < streams.length; i++) {
+          nextFutures[i] = streams[i].next().then((v) => [v.value, i]);
+        }
+      }
+
+      return Promise.race(nextFutures).then(([value, index]) => {
+        completed = index;
+        return value;
+      });
+    });
+  }
+
+  public static zip<K extends Array<Stream<any>>>(streams: K): Stream<Array<InferStreamResult<K[0]>>> {
+    const register = R.once(
+      (signal: AbortSignal) => (signal.onabort = () => streams.forEach((stream) => stream.cancel()))
+    );
+    return new Stream<Array<InferStreamResult<K[0]>>>((signal) => {
+      register(signal);
+      return Promise.all(streams.map((stream) => stream.next().then((v) => v.value)));
     });
   }
 
