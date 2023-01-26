@@ -108,22 +108,35 @@ export class Stream<T> implements AsyncGenerator<T> {
     const register = R.once(
       (signal: AbortSignal) => (signal.onabort = () => streams.forEach((stream) => stream.cancel()))
     );
+    const yieldFromStream = async (stream: Stream<any>) => {
+      while (true) {
+        const result = await stream.next();
+        if (!result.done && result.value !== null && result.value !== undefined) {
+          return result.value;
+        } else if (result.done) {
+          return null;
+        }
+      }
+    };
+
     return new Stream<Array<InferStreamResult<K[0]>>>(async (signal) => {
       register(signal);
       let done = false;
-      return new ExecutorState(
-        done,
-        await Promise.all(
-          streams.map((stream) =>
-            stream.next().then((v) => {
-              if (v.done) {
-                done = true;
-              }
-              return v.value;
-            })
-          )
+      const results = await Promise.all(
+        streams.map((stream) =>
+          yieldFromStream(stream).then((v: any) => {
+            if (v === null) {
+              done = true;
+            }
+            return null;
+          })
         )
       );
+
+      if (done) {
+        return new ExecutorState(true);
+      }
+      return new ExecutorState(false, results);
     });
   }
 
@@ -157,9 +170,14 @@ export class Stream<T> implements AsyncGenerator<T> {
         }
       });
     } else if (value instanceof Future) {
+      let completed = false;
       return new Stream<K>(async (signal) => {
         value.registerSignal(signal);
-        return new ExecutorState(true, await value) as any;
+        if (completed) {
+          return new ExecutorState(true);
+        }
+        completed = true;
+        return new ExecutorState(false, await value) as any;
       });
     }
 
