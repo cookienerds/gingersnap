@@ -128,7 +128,7 @@ export class Stream<T> implements AsyncGenerator<T> {
             if (v === null) {
               done = true;
             }
-            return null;
+            return v;
           })
         )
       );
