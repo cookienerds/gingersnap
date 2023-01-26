@@ -489,84 +489,82 @@ export class Stream<T> implements AsyncGenerator<T> {
       data = value;
     }
 
-    if (data !== null && data !== undefined) {
-      for (; i < this.actions.length; i++) {
-        try {
-          const { type, functor } = this.actions[i];
-          switch (type) {
-            case ActionType.FILTER: {
-              const preResult = await this.yieldTrueResult(preProcessor(data));
-              const result = await this.yieldTrueResult(
-                functor(preResult instanceof Promise ? await preResult : preResult)
-              );
-              if (result === null || result === undefined) {
-                return { state: State.CONTINUE };
-              }
-              data = result as T;
-              break;
+    for (; i < this.actions.length; i++) {
+      try {
+        const { type, functor } = this.actions[i];
+        switch (type) {
+          case ActionType.FILTER: {
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            );
+            if (result === null || result === undefined) {
+              return { state: State.CONTINUE };
             }
-            case ActionType.TRANSFORM: {
-              const preResult = await this.yieldTrueResult(preProcessor(data));
-              const result = await this.yieldTrueResult(
-                functor(preResult instanceof Promise ? await preResult : preResult)
-              );
+            data = result as T;
+            break;
+          }
+          case ActionType.TRANSFORM: {
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            );
 
-              if (result instanceof Stream) {
-                this.backlog = [{ actionIndex: i + 1, records: result }, ...this.backlog];
-                return { state: State.CONTINUE };
-              }
-              data = result as T;
-              break;
+            if (result instanceof Stream) {
+              this.backlog = [{ actionIndex: i + 1, records: result }, ...this.backlog];
+              return { state: State.CONTINUE };
             }
-            case ActionType.PACK: {
-              const preResult = await this.yieldTrueResult(preProcessor(data));
-              const result = (await this.yieldTrueResult(
-                functor(preResult instanceof Promise ? await preResult : preResult)
-              )) as LimitResult<T>;
+            data = result as T;
+            break;
+          }
+          case ActionType.PACK: {
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = (await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            )) as LimitResult<T>;
 
-              if (!result.done) {
-                return { state: State.CONTINUE };
-              }
-              data = result.value;
-              break;
+            if (!result.done) {
+              return { state: State.CONTINUE };
             }
-            case ActionType.LIMIT: {
-              const preResult = await this.yieldTrueResult(preProcessor(data));
-              const result = (await this.yieldTrueResult(
-                functor(preResult instanceof Promise ? await preResult : preResult)
-              )) as LimitResult<T>;
+            data = result.value;
+            break;
+          }
+          case ActionType.LIMIT: {
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = (await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            )) as LimitResult<T>;
 
-              if (result.done) {
-                this.canRunExecutor = false;
-                this.backlog = [];
-                this.actions = this.actions.splice(i + 1);
-                i = -1;
-              }
-              data = result.value;
-              break;
+            if (result.done) {
+              this.canRunExecutor = false;
+              this.backlog = [];
+              this.actions = this.actions.splice(i + 1);
+              i = -1;
             }
-            case ActionType.UNPACK: {
-              const preResult = await this.yieldTrueResult(preProcessor(data));
-              const result = (await this.yieldTrueResult(
-                functor(preResult instanceof Promise ? await preResult : preResult)
-              )) as T[];
+            data = result.value;
+            break;
+          }
+          case ActionType.UNPACK: {
+            const preResult = await this.yieldTrueResult(preProcessor(data));
+            const result = (await this.yieldTrueResult(
+              functor(preResult instanceof Promise ? await preResult : preResult)
+            )) as T[];
 
-              if (result.length === 0) {
-                return { state: State.CONTINUE };
-              } else if (result.length === 1) {
-                data = result[0];
-              } else {
-                const value = result.shift();
-                this.backlog = [{ actionIndex: i + 1, records: result }, ...this.backlog];
-                data = value;
-              }
+            if (result.length === 0) {
+              return { state: State.CONTINUE };
+            } else if (result.length === 1) {
+              data = result[0];
+            } else {
+              const value = result.shift();
+              this.backlog = [{ actionIndex: i + 1, records: result }, ...this.backlog];
+              data = value;
             }
           }
-        } catch (error: unknown) {
-          const [value, index] = await this.processError(error, i);
-          i = index;
-          if (value !== undefined && value !== null) data = value;
         }
+      } catch (error: unknown) {
+        const [value, index] = await this.processError(error, i);
+        i = index;
+        if (value !== undefined && value !== null) data = value;
       }
     }
     return { state: State.MATCHED, value: data };
