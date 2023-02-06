@@ -1,10 +1,9 @@
 import NetworkError from "../errors/NetworkError";
 import { HTTPStatus } from "../annotations/service";
 import { Stream } from "./stream";
-import { Queue } from "../data-structures/object/Queue";
-import { v4 as uuid } from "uuid";
-import StreamEnded from "../errors/StreamEnded";
 import { Future, WaitPeriod } from "./future";
+import { BufferQueue } from "../data-structures/object";
+import { ExecutorState } from "./state";
 
 type SocketFunctor<T extends CloseEvent | Event | MessageEvent> = (this: WebSocket, evt: T) => any;
 
@@ -28,8 +27,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
 
   private closeFutureCallbacks!: [() => void, (reason?: any) => void, AbortSignal];
 
-  private readonly messageQueue: Queue<Blob>;
-  private readonly streamQueue: Map<string, Queue<Blob>>;
+  private readonly messageQueue: BufferQueue<Blob>;
 
   private readonly url: string;
   private socket?: WebSocket;
@@ -56,8 +54,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
     this.exponentialFactor = exponentialFactor ?? 2;
     this.backoffPeriodMs = backoffPeriodMs ?? 10;
     this.backoffPeriods = -1;
-    this.messageQueue = new Queue<Blob>(this.cacheSize, cacheExpiryPeriod ?? { seconds: 60 });
-    this.streamQueue = new Map<string, Queue<Blob>>();
+    this.messageQueue = new BufferQueue<Blob>(this.cacheSize, cacheExpiryPeriod ?? { seconds: 60 });
   }
 
   get opened() {
@@ -123,12 +120,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
         });
         const cancelQueue = this.addEventListener("message", (evt: MessageEvent) => {
           const data = typeof evt.data === "string" ? new Blob([evt.data]) : evt.data;
-          if (this.streamQueue.size > 0) {
-            this.loadBackfilledMessages();
-            for (const queue of this.streamQueue.values()) queue.enqueue(data);
-          } else {
-            this.messageQueue.enqueue(data);
-          }
+          this.messageQueue.enqueue(data);
         });
         this.createSocket();
       });
@@ -153,7 +145,6 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
   close() {
     this.manuallyClosed = true;
     this.getSocket()?.close();
-    this.streamQueue.clear();
     this.messageQueue.clear();
   }
 
@@ -169,38 +160,20 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
    * Gets the stream for messages received via this socket
    */
   get stream(): Stream<T> {
-    const guid = uuid();
+    const messageStream = this.messageQueue.streamEntries[Symbol.asyncIterator]();
     return new Stream<T>(async (signal) => {
       if (!this.closed) {
-        const value = await Promise.race([(await this.getQueue(guid)).awaitDequeue(signal), this.closedFuture()]);
+        const value = await Promise.race([
+          Future.of(
+            messageStream.next().then((v) => v.value),
+            signal
+          ).thenApply((v) => v.value),
+          this.closedFuture(),
+        ]);
         if (value) return value;
-        else this.removeQueue(guid);
       }
-      throw new StreamEnded();
+      return new ExecutorState(true);
     });
-  }
-
-  private removeQueue(guid: string) {
-    this.streamQueue.delete(guid);
-  }
-
-  private async getQueue(guid: string) {
-    let queue = this.streamQueue.get(guid);
-    if (!queue) {
-      queue = new Queue<Blob>();
-      this.streamQueue.set(guid, queue);
-    }
-    this.loadBackfilledMessages();
-    return queue;
-  }
-
-  private loadBackfilledMessages() {
-    while (!this.messageQueue.empty) {
-      const data = this.messageQueue.dequeue();
-      for (const queue of this.streamQueue.values()) {
-        queue.enqueue(data);
-      }
-    }
   }
 
   private addEventListener<T extends CloseEvent | Event | MessageEvent>(

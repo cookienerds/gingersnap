@@ -7,7 +7,6 @@ import { Stream } from "../../utils/stream";
 import ParsingError from "../../errors/ParsingError";
 import { DataFormat, Model } from "../model";
 import { FutureResult } from "../../utils/future";
-import { ExecutorState } from "../../utils";
 
 export class WebSocketService extends Service {
   private readonly socket: StreamableWebSocket;
