@@ -205,7 +205,7 @@ export class Future<T> {
    * Internal. Only to be called by the internal JS runtime during await
    * @private
    */
-  private then(onFulfilled: (v: T) => void, onRejected: (reason: unknown) => void) {
+  then(onFulfilled: (v: T) => void, onRejected: (reason: unknown) => void) {
     return this.__run__(onFulfilled, onRejected);
   }
 
