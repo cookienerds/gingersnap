@@ -48,9 +48,7 @@ export interface FieldProps {
 
 /** @ignore */
 export interface ModelInternalProps {
-  fields: {
-    [string: string]: FieldProps;
-  };
+  fields: Map<string, FieldProps>;
   parent?: string;
 }
 
@@ -248,7 +246,7 @@ export class Model {
         return acc;
       },
       {},
-      R.toPairs(Model.buildPropTree(this.constructor.name)?.fields ?? {})
+      Array.from((Model.buildPropTree(Object.getPrototypeOf(this))?.fields ?? new Map<string, FieldProps>()).entries())
     );
   }
 
@@ -324,17 +322,28 @@ export class Model {
 
   /**
    * Constructs the model properties by traversing the inheritance tree of the current Model being instantiated
-   * @param namespace Name of the model
+   * @param modelPrototype prototype of the model
    * @ignore
    */
-  private static buildPropTree(namespace: string): ModelInternalProps {
+  private static buildPropTree(modelPrototype: any): ModelInternalProps {
     let value: ModelInternalProps | undefined;
-    let space = namespace;
-    const tree: ModelInternalProps = { fields: {} };
+    let proto = !modelPrototype.name ? modelPrototype.constructor : modelPrototype;
+    const tree: ModelInternalProps = { fields: new Map() };
 
-    while (space && (value = namespacedModelInternalProps.get(space))) {
-      tree.fields = { ...tree.fields, ...value.fields };
-      space = value.parent ?? "";
+    while (proto && proto?.name !== "Function") {
+      let space = proto.name;
+      tree.fields.clear();
+      while (space && (value = namespacedModelInternalProps.get(space))) {
+        value.fields.forEach((value, key) => tree.fields.set(key, value));
+        space = value.parent ?? "";
+      }
+
+      // could be that subclass didn't use any annotators. check parent
+      if (tree.fields.size === 0) {
+        proto = Object.getPrototypeOf(proto);
+      } else {
+        break;
+      }
     }
     return tree;
   }
@@ -347,7 +356,7 @@ export class Model {
    */
   private static fromObject<T extends Model>(data: Object, xml: boolean = false): T {
     const model: any = new this();
-    const props: ModelInternalProps = this.buildPropTree(model.constructor.name);
+    const props: ModelInternalProps = this.buildPropTree(Object.getPrototypeOf(model));
 
     if (xml && typeof (data as any) === "string") {
       data = {};
@@ -438,7 +447,7 @@ export class Model {
       R.forEach(([k, v]) => {
         if (v.__callback__) v.__callback__(k, v.properties, model, fieldProps.name);
       }, R.toPairs(fieldProps.customTags ?? {}));
-    }, R.toPairs(props.fields));
+    }, Array.from(props.fields.entries()));
 
     return model as T;
   }
@@ -452,7 +461,7 @@ export class Model {
       case DataFormat.AVRO: {
         if (schemas.avro) return schemas.avro;
         const className: string = model.constructor.name;
-        const props: ModelInternalProps = this.buildPropTree(className);
+        const props: ModelInternalProps = this.buildPropTree(Object.getPrototypeOf(model));
         const avro: any = {
           type: "record",
           name: className,
@@ -552,7 +561,7 @@ export class Model {
             }
           }
           avro.fields.push(field);
-        }, R.toPairs(props.fields));
+        }, Array.from(props.fields.entries()));
 
         schemas.avro = avro;
         modelSchema.set(model.constructor.name, schemas);

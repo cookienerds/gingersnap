@@ -10,8 +10,10 @@ import { DataType } from "./types";
  */
 const createFieldUpdater =
   (functor: (v: { field: FieldProps; target: any; key: string }) => void) => (target: any, key: string) => {
-    const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: {} };
-    const field = R.find((v) => v.name === key, R.values(props.fields));
+    const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? {
+      fields: new Map(),
+    };
+    const field = R.find((v) => v.name === key, Array.from(props.fields.values()));
     if (!field) throw new Error(`No field found that matches ${key}`);
 
     functor({ field, target, key });
@@ -74,7 +76,7 @@ export const Ignore = (value: IgnoreProps = { serialize: false, deserialize: tru
  * @constructor
  */
 export const Field = (name?: string) => (target: any, key: string) => {
-  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: {} };
+  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: new Map() };
   const type = Reflect.getMetadata("design:type", target, key);
   const schema: any = {};
   if (type instanceof Number) {
@@ -88,12 +90,12 @@ export const Field = (name?: string) => (target: any, key: string) => {
     schema.options = { recordClass: type };
   }
 
-  props.fields[name ?? key] = {
+  props.fields.set(name ?? key, {
     name: key,
     Type: type,
     isArray: false,
     schema,
-  };
+  });
   props.parent = Object.getPrototypeOf(target).constructor.name;
   namespacedModelInternalProps.set(target.constructor.name, props);
 };
@@ -106,7 +108,7 @@ export const Field = (name?: string) => (target: any, key: string) => {
  * @constructor
  */
 export const ArrayField = (type: any, name?: string) => (target: any, key: string) => {
-  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: {} };
+  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: new Map() };
   const schema: any = { dataType: DataType.ARRAY };
   if (type instanceof Number) {
     schema.itemType = DataType.DOUBLE;
@@ -118,12 +120,12 @@ export const ArrayField = (type: any, name?: string) => (target: any, key: strin
     schema.options = { recordClass: type };
   }
 
-  props.fields[name ?? key] = {
+  props.fields.set(name ?? key, {
     name: key,
     Type: type,
     isArray: true,
     schema,
-  };
+  });
   props.parent = Object.getPrototypeOf(target).constructor.name;
   namespacedModelInternalProps.set(target.constructor.name, props);
 };

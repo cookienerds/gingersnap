@@ -57,15 +57,17 @@ export const createModelFieldAnnotationTag =
     onFieldCreated?: (tagName: string, properties: Object, target: Model, fieldName: string) => void
   ) =>
   (target: any, key: string) => {
-    const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: {} };
-    const result = R.find(([k, v]) => v.name === key, R.toPairs(props.fields));
+    const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? {
+      fields: new Map(),
+    };
+    const result = R.find(([k, v]) => v.name === key, Array.from(props.fields.entries()));
 
     if (!result) {
       throw new Error(`Cannot create annotation tag of type ${name}, field does not exist as yet`);
     }
 
-    props.fields[result[0]].customTags = props.fields[result[0]].customTags ?? {};
-    props.fields[result[0]].customTags![name] = {
+    props.fields.get(result[0])!.customTags = props.fields.get(result[0])!.customTags ?? {};
+    props.fields.get(result[0])!.customTags![name] = {
       __callback__: onFieldCreated,
       properties,
     };
@@ -83,7 +85,7 @@ export const getModelFieldAnnotationTagProperties = (
   tagNames: string[],
   ModelClass: any
 ): FieldTagPropertyDescription[] => {
-  const props: ModelInternalProps = (Model as any).buildPropTree(ModelClass.name);
+  const props: ModelInternalProps = (Model as any).buildPropTree(ModelClass);
   return R.map(([k, v]) => {
     if (v.customTags) {
       const tagName = tagNames.find((t) => t in v.customTags!);
@@ -98,5 +100,5 @@ export const getModelFieldAnnotationTagProperties = (
         : null;
     }
     return null;
-  }, R.toPairs(props.fields)).filter((v) => v) as FieldTagPropertyDescription[];
+  }, Array.from(props.fields.entries())).filter((v) => v) as FieldTagPropertyDescription[];
 };
