@@ -5,15 +5,21 @@ import * as R from "ramda";
 import CallExecutionError from "../../errors/CallExecutionError";
 import { Stream } from "../../utils/stream";
 import ParsingError from "../../errors/ParsingError";
-import { DataFormat, Model } from "../model";
 import { FutureResult } from "../../utils/future";
+import { JSONDecoder } from "../../utils/decoders/json";
+import { Model } from "../model";
+import { GingerSnapProps } from "../index";
 
 export class WebSocketService extends Service {
-  private readonly socket: StreamableWebSocket;
+  private readonly socket: StreamableWebSocket<any>;
 
-  constructor(...args: any[]) {
-    super(...args);
-    this.socket = new StreamableWebSocket(this.baseUrl);
+  constructor({ decoder, ...other }: GingerSnapProps = {}) {
+    super(other ?? {});
+    const internals: ServiceInternalProps = (this as any).__internal__;
+    this.socket = new StreamableWebSocket(
+      this.baseUrl,
+      decoder ?? (internals.classConfig.Decoder ? new internals.classConfig.Decoder() : new JSONDecoder())
+    );
   }
 
   /**
@@ -31,12 +37,15 @@ export class WebSocketService extends Service {
     await this.socket.closedFuture();
   }
 
-  async ready() {
-    return await this.socket.open();
+  ready() {
+    return this.socket.open();
   }
 
   protected __setup__(): void {
     const internals: ServiceInternalProps = (this as any).__internal__;
+    if (this.socket.decoder.load) {
+      this.socket.decoder.load();
+    }
     const socketMethods = R.filter(
       ([_, v]) => (v.socketReadStream ?? v.socketWriteStream) !== undefined,
       R.toPairs(internals.methodConfig)
@@ -93,14 +102,15 @@ export class WebSocketService extends Service {
             return null;
           }).once();
         } else {
-          let stream = this.socket.stream;
+          let stream = this.socket.stream.flatten().filter(dataComparator);
           if (config.socketReadStream?.take !== undefined) stream = stream.take(config.socketReadStream.take);
 
           return stream
-            .map((data) => (config.responseClass as typeof Model).fromBlob(data, config.dataFormat ?? DataFormat.JSON))
-            .filter(R.complement(R.isNil))
+            .map((data) => {
+              const ModelClass = config.responseClass as typeof Model;
+              return ModelClass.fromJSON(data);
+            })
             .flatten()
-            .filter(dataComparator)
             .map(async (v) => {
               let result = oldMethod(v);
               if (result === null || result === undefined) return v;

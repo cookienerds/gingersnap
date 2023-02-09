@@ -1,5 +1,6 @@
 import { Credentials } from "../model/credentials";
 import { DataFormat } from "../model";
+import { Decoder } from "../../utils/decoders/type";
 
 export enum RequestType {
   GET = "GET",
@@ -102,6 +103,7 @@ export interface MethodConfiguration {
 export interface ServiceInternalProps {
   classConfig: {
     baseUrl?: string;
+    Decoder?: any;
   };
   methodConfig: {
     [string: string]: MethodConfiguration;

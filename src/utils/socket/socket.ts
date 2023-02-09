@@ -1,9 +1,10 @@
-import NetworkError from "../errors/NetworkError";
-import { HTTPStatus } from "../annotations/service";
-import { Stream } from "./stream";
-import { Future, WaitPeriod } from "./future";
-import { BufferQueue } from "../data-structures/object";
-import { ExecutorState } from "./state";
+import NetworkError from "../../errors/NetworkError";
+import { HTTPStatus } from "../../annotations/service";
+import { Stream } from "../stream";
+import { Future, WaitPeriod } from "../future";
+import { BufferQueue } from "../../data-structures/object";
+import { ExecutorState } from "../state";
+import { Decoder } from "../decoders/type";
 
 type SocketFunctor<T extends CloseEvent | Event | MessageEvent> = (this: WebSocket, evt: T) => any;
 
@@ -18,7 +19,7 @@ interface WebSocketConfiguration {
 /**
  * Promise based web sockets
  */
-export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
+export class StreamableWebSocket<T> {
   private readonly retryOnDisconnect: boolean;
   private openFuture?: Future<void>;
   private closeFuture?: Future<void>;
@@ -27,7 +28,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
 
   private closeFutureCallbacks!: [() => void, (reason?: any) => void, AbortSignal];
 
-  private readonly messageQueue: BufferQueue<Blob>;
+  private readonly messageQueue: BufferQueue<T>;
 
   private readonly url: string;
   private socket?: WebSocket;
@@ -42,10 +43,14 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
 
   private backoffPeriods: number;
 
+  readonly decoder: Decoder<T>;
+
   constructor(
     url: string,
+    decoder: Decoder<T>,
     { retryOnDisconnect, cacheSize, cacheExpiryPeriod, exponentialFactor, backoffPeriodMs }: WebSocketConfiguration = {}
   ) {
+    this.decoder = decoder;
     this.socketListeners = [];
     this.url = url;
     this.cacheSize = cacheSize ?? 10000;
@@ -54,7 +59,7 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
     this.exponentialFactor = exponentialFactor ?? 2;
     this.backoffPeriodMs = backoffPeriodMs ?? 10;
     this.backoffPeriods = -1;
-    this.messageQueue = new BufferQueue<Blob>(this.cacheSize, cacheExpiryPeriod ?? { seconds: 60 });
+    this.messageQueue = new BufferQueue<T>(this.cacheSize, cacheExpiryPeriod ?? { seconds: 60 });
   }
 
   get opened() {
@@ -118,9 +123,15 @@ export class StreamableWebSocket<T extends Blob | ArrayBuffer = Blob> {
             reject(new NetworkError(HTTPStatus.EXPECTATION_FAILED));
           }
         });
-        const cancelQueue = this.addEventListener("message", (evt: MessageEvent) => {
-          const data = typeof evt.data === "string" ? new Blob([evt.data]) : evt.data;
-          this.messageQueue.enqueue(data);
+        const cancelQueue = this.addEventListener("message", async (evt: MessageEvent) => {
+          const data = typeof evt.data === "string" ? new Blob([evt.data]) : (evt.data as Blob);
+          const result = this.decoder.decode(data);
+
+          if (result instanceof Future || result instanceof Promise) {
+            this.messageQueue.enqueue(await result);
+          } else {
+            this.messageQueue.enqueue(result);
+          }
         });
         this.createSocket();
       });

@@ -1,4 +1,5 @@
 import { Service } from "./service";
+import { Decoder } from "../utils/decoders/type";
 
 export { Call, Callable } from "../utils/call";
 
@@ -6,6 +7,8 @@ export interface GingerSnapProps {
   baseUrl?: string;
   retryLimit?: number;
   cacheServices?: boolean;
+  decoder?: Decoder<any>;
+  [string: string]: any;
 }
 
 const DEFAULT_RETRY_LIMIT = 3;
@@ -34,10 +37,14 @@ export class GingerSnap {
   /**
    * Creates a new instance of the provided SnapService
    * @param Class A SnapService class
-   * @param baseUrl host used by the service
+   * @param args
    */
-  public create<T extends Service>(Class: new (v: GingerSnapProps) => T, baseUrl?: string): T {
-    const instance = new Class({ baseUrl: baseUrl ?? this.baseUrl, retryLimit: this.retryLimit });
+  public create<T extends Service>(Class: new (v: GingerSnapProps) => T, args?: GingerSnapProps): T {
+    const instance = new Class({
+      ...(args ?? {}),
+      baseUrl: args?.baseUrl ?? this.baseUrl,
+      retryLimit: args?.retryLimit ?? this.retryLimit,
+    });
     (instance as any).__setup__();
     return instance;
   }

@@ -178,13 +178,17 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
     }) as Future<K>;
   }
 
-  on(key: T, callback: (value: K) => void) {
-    return super.on(key, (v) => {
-      void Future.sleep(1)
-        .thenApply(() => this.getListeners.forEach((listener) => listener(key)))
-        .run();
-      callback(v);
-    });
+  on(key: T, callback: (value: K) => void, multiCall = true) {
+    return super.on(
+      key,
+      (v) => {
+        void Future.sleep(1)
+          .thenApply(() => this.getListeners.forEach((listener) => listener(key)))
+          .run();
+        callback(v);
+      },
+      multiCall
+    );
   }
 
   values(copy?: boolean) {

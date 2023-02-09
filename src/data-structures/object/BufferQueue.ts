@@ -23,10 +23,14 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
         return value as T;
       }
       return Future.of<T>((resolve, reject, signal) => {
-        signal.onabort = this.on(pointer, (v) => {
-          pointer++;
-          resolve(v as any);
-        });
+        signal.onabort = this.on(
+          pointer,
+          (v) => {
+            pointer++;
+            resolve(v as any);
+          },
+          false
+        );
       }, signal);
     }) as any);
   }

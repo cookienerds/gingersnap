@@ -163,7 +163,9 @@ export class Future<T> {
   }
 
   public schedule() {
-    void this.run();
+    this.run().catch((error) => {
+      console.error(error);
+    });
     return this;
   }
 

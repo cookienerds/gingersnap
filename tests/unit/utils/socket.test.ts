@@ -7,6 +7,7 @@ import { Future } from "../../../src/utils";
 describe("Browser WebSocket", function () {
   const url = "ws://localhost.com";
   const url2 = "ws://localhost.test.com";
+  const blobDecoder = { decode: (v) => v };
   let server: WS;
 
   beforeEach(() => {
@@ -23,7 +24,7 @@ describe("Browser WebSocket", function () {
     server.on("connection", () => (connected = true));
     server.on("close", () => (closed = true));
 
-    const socket = new StreamableWebSocket(url, { retryOnDisconnect: false });
+    const socket = new StreamableWebSocket(url, blobDecoder, { retryOnDisconnect: false });
     await Promise.race([socket.open(), Future.sleep({ seconds: 1 })]).then(() => {
       expect(connected).toBeTruthy();
     });
@@ -35,7 +36,7 @@ describe("Browser WebSocket", function () {
   });
 
   it("should send messages", async () => {
-    const socket = new StreamableWebSocket(url, { retryOnDisconnect: false });
+    const socket = new StreamableWebSocket(url, blobDecoder, { retryOnDisconnect: false });
     await Future.waitFor(socket.open(), { seconds: 1 });
     socket.send("Hello");
     await Promise.race([server.messagesToConsume.get(), Future.sleep({ seconds: 1 })]).then((result) => {
@@ -45,7 +46,7 @@ describe("Browser WebSocket", function () {
   });
 
   it("should receive messages", async () => {
-    const socket = new StreamableWebSocket<Blob>(url, { retryOnDisconnect: false });
+    const socket = new StreamableWebSocket<Blob>(url, blobDecoder, { retryOnDisconnect: false });
     const testMessages = ["Hello", "World", "Testing"];
 
     await Future.waitFor(socket.open(), { seconds: 1 });
@@ -60,7 +61,7 @@ describe("Browser WebSocket", function () {
   });
 
   it("should close stream once socket closed", async () => {
-    const socket = new StreamableWebSocket<Blob>(url, { retryOnDisconnect: false });
+    const socket = new StreamableWebSocket<Blob>(url, blobDecoder, { retryOnDisconnect: false });
     const testMessages = ["Hello", "World", "Testing"];
 
     await Future.waitFor(socket.open(), { seconds: 1 });
@@ -76,7 +77,7 @@ describe("Browser WebSocket", function () {
   });
 
   it("should retry connection", async () => {
-    const socket = new StreamableWebSocket<Blob>(url2);
+    const socket = new StreamableWebSocket<Blob>(url2, blobDecoder);
     void socket.open().schedule();
     await Future.sleep({ seconds: 1 });
     expect(socket.opened).toBeFalsy();
@@ -90,7 +91,7 @@ describe("Browser WebSocket", function () {
   });
 
   it("should fail to connect", async () => {
-    const socket = new StreamableWebSocket<Blob>(url2, { retryOnDisconnect: false });
+    const socket = new StreamableWebSocket<Blob>(url2, blobDecoder, { retryOnDisconnect: false });
     await expect(Future.waitFor(socket.open(), { seconds: 5 }).run()).rejects.toEqual(
       new NetworkError(HTTPStatus.EXPECTATION_FAILED)
     );

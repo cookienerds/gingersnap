@@ -40,3 +40,10 @@ export const Take = (amount: number) => (target: any, propertyKey: string) => {
     proto.__internal__
   );
 };
+
+// Decoder must return an object
+export const DataDecoder = (Decoder: any) => (constructor: any) => {
+  const proto = createProps(constructor);
+  const typeLens = R.lensPath(["classConfig", "Decoder"]);
+  proto.__internal__ = R.set(typeLens, Decoder, proto.__internal__);
+};

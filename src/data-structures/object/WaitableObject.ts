@@ -40,11 +40,12 @@ export class WaitableObject<T, K> extends TimeableObject<T, K> {
    * Retrieves the value at the given key once it exists, or the value changes
    * @param key path
    * @param callback callback function that is trigger once value exist or is changed
+   * @param multiCall
    * @returns unsubscribe function
    */
-  on(key: T, callback: (value: K) => void) {
+  on(key: T, callback: (value: K) => void, multiCall = true) {
     const guid = uuid();
-    this.listeners.set(guid, [key, callback, true]);
+    this.listeners.set(guid, [key, callback, multiCall]);
     return () => this.listeners.delete(guid);
   }
 

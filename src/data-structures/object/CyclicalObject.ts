@@ -35,24 +35,6 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
     this.indexes = new Array(objectMaxSize);
     this.pointer = -1;
     this.objectMaxSize = objectMaxSize;
-    if (this.objectMaxSize && this.objectMaxSize >= 0) {
-      this.set = (key: T, value: K) => {
-        if (this.realTargetObject.has(key)) {
-          this.realTargetObject.set(key, value);
-          return;
-        }
-
-        this.pointer = this.objectMaxSize ? (this.pointer + 1) % this.objectMaxSize : this.pointer + 1;
-        const prop = this.indexes[this.pointer];
-        if (prop !== undefined) {
-          this.realTargetObject.delete(prop);
-        }
-
-        this.realTargetObject.set(key, value);
-        this.indexes[this.pointer] = key;
-        return true;
-      };
-    }
   }
 
   public static from<T, K>(data: Map<T, K> | Array<[T, K]> | { T: K }) {
@@ -94,6 +76,22 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
    * @param value
    */
   set(key: T, value: K) {
+    if (this.objectMaxSize) {
+      if (this.realTargetObject.has(key)) {
+        this.realTargetObject.set(key, value);
+        return;
+      }
+
+      this.pointer = this.objectMaxSize ? (this.pointer + 1) % this.objectMaxSize : this.pointer + 1;
+      const prop = this.indexes[this.pointer];
+      if (prop !== undefined) {
+        this.realTargetObject.delete(prop);
+      }
+
+      this.realTargetObject.set(key, value);
+      this.indexes[this.pointer] = key;
+      return;
+    }
     this.realTargetObject.set(key, value);
   }
 
