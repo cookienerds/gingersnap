@@ -3,7 +3,6 @@ import FutureError from "../errors/FutureError";
 import TimeoutError from "../errors/TimeoutError";
 import InvalidValue from "../errors/InvalidValue";
 import * as R from "ramda";
-import { clearTimeout } from "timers";
 import { Stream } from "./stream";
 import { SimpleQueue } from "../data-structures/object/SimpleQueue";
 import { InferStreamResult } from "./types";
