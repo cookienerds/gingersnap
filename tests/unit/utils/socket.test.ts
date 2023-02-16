@@ -51,7 +51,8 @@ describe("Browser WebSocket", function () {
 
     await Future.waitFor(socket.open(), { seconds: 1 });
     testMessages.forEach((message) => server.send(message));
-    const responseMessage = await socket.stream
+    const responseMessage = await socket
+      .stream()
       .map((v) => v.text())
       .take(testMessages.length)
       .collect();
@@ -70,7 +71,10 @@ describe("Browser WebSocket", function () {
     void Future.sleep({ seconds: 1 })
       .thenApply(() => socket.close())
       .schedule();
-    const responseMessage = await socket.stream.map(async (v) => await v.text()).collect();
+    const responseMessage = await socket
+      .stream()
+      .map(async (v) => await v.text())
+      .collect();
 
     expect(responseMessage).toEqual(testMessages);
     socket.close();

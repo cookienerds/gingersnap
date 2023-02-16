@@ -28,6 +28,32 @@ export const WriteStream = (target: any, propertyKey: string) => {
   proto.__internal__ = R.set(typeLens, true, proto.__internal__);
 };
 
+export const IgnoreCache = (target: any, propertyKey: string) => {
+  const proto = createProps(target.constructor);
+  const typeLens = R.lensPath(["methodConfig", propertyKey, "socketReadStream"]);
+  proto.__internal__ = R.over(
+    typeLens,
+    (v) => ({
+      ...(v ?? {}),
+      ignoreCache: true,
+    }),
+    proto.__internal__
+  );
+};
+
+export const Skip = (amount: number) => (target: any, propertyKey: string) => {
+  const proto = createProps(target.constructor);
+  const typeLens = R.lensPath(["methodConfig", propertyKey, "socketReadStream"]);
+  proto.__internal__ = R.over(
+    typeLens,
+    (v) => ({
+      ...(v ?? {}),
+      skip: amount,
+    }),
+    proto.__internal__
+  );
+};
+
 export const Take = (amount: number) => (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const typeLens = R.lensPath(["methodConfig", propertyKey, "socketReadStream"]);

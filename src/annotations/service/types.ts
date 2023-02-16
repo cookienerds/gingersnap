@@ -86,6 +86,8 @@ export interface MethodConfiguration {
     keyPath: string | Array<string | number>;
     array: boolean;
     take?: number;
+    skip?: number;
+    ignoreCache?: boolean;
   };
   socketWriteStream?: boolean;
   customTags?: Array<{

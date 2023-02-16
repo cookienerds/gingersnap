@@ -14,8 +14,8 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
     this.head = 0;
   }
 
-  get streamEntries(): Stream<T> {
-    let pointer = 0;
+  streamEntries(ignoreCache = false): Stream<T> {
+    let pointer = ignoreCache ? this.tail : 0;
     return new Stream(((signal) => {
       const value = this.get(pointer);
       if (value !== undefined) {

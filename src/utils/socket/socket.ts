@@ -170,8 +170,8 @@ export class StreamableWebSocket<T> {
   /**
    * Gets the stream for messages received via this socket
    */
-  get stream(): Stream<T> {
-    const messageStream = this.messageQueue.streamEntries[Symbol.asyncIterator]();
+  stream(ignoreCache = false): Stream<T> {
+    const messageStream = this.messageQueue.streamEntries(ignoreCache)[Symbol.asyncIterator]();
     return new Stream<T>(async (signal) => {
       if (!this.closed) {
         const value = await Promise.race([

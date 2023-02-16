@@ -102,7 +102,8 @@ export class WebSocketService extends Service {
             return null;
           }).once();
         } else {
-          let stream = this.socket.stream.flatten().filter(dataComparator);
+          let stream = this.socket.stream(config.socketReadStream?.ignoreCache ?? false).filter(dataComparator);
+          if (config.socketReadStream?.skip !== undefined) stream = stream.skip(config.socketReadStream.skip);
           if (config.socketReadStream?.take !== undefined) stream = stream.take(config.socketReadStream.take);
 
           return stream
