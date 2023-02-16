@@ -162,9 +162,7 @@ export class Future<T> {
   }
 
   public schedule() {
-    this.run().catch((error) => {
-      console.error(error);
-    });
+    this.run().catch(() => {});
     return this;
   }
 
