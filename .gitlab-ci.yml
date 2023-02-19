@@ -34,10 +34,9 @@ build_image:
 pages:
   stage: deploy
   script:
-    - npm run docs
-    - rm -rf public
-    - mkdir -p public
-    - mv docs/* public && rm -r docs
+    - npm run docs:external:build
+    - npm run docs:internal:build
+    - mv docs/internal/* public/internal
   artifacts:
     paths:
       - public
