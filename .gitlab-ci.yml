@@ -36,6 +36,7 @@ pages:
   script:
     - npm run docs:external:build
     - npm run docs:internal:build
+    - mkdir -f public/internal
     - mv docs/internal/* public/internal
   artifacts:
     paths:
