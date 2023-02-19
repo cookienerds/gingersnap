@@ -5,6 +5,7 @@ import { AnyDataType, Flattened, InferErrorResult, InferStreamResult } from "./t
 import { Future, FutureResult, WaitPeriod } from "./future";
 import FutureCancelled from "../errors/FutureCancelled";
 import { ExecutorState } from "./state";
+import FutureError from "../errors/FutureError";
 
 enum ActionType {
   TRANSFORM,
@@ -348,29 +349,42 @@ export class Stream<T> implements AsyncGenerator<T> {
     return newStream as unknown as Stream<InferErrorResult<K, T> | T>;
   }
 
-  async collect() {
-    const collection: T[] = [];
+  collect(): Future<T[]> {
+    return new Future(async (resolve, reject) => {
+      const collection: T[] = [];
 
-    for await (const value of this) {
-      collection.push(value);
-    }
-    return collection;
+      try {
+        for await (const value of this) {
+          collection.push(value);
+        }
+        resolve(collection);
+      } catch (error: any) {
+        reject(error instanceof FutureError ? error : new FutureError((error?.message as string) ?? "Unknown"));
+      }
+    });
   }
 
-  async consume(limit = Number.POSITIVE_INFINITY) {
-    if (limit !== Number.POSITIVE_INFINITY && limit !== Number.NEGATIVE_INFINITY) {
-      if (limit === 0) return;
+  consume(limit = Number.POSITIVE_INFINITY): Future<void> {
+    return new Future<void>(async (resolve, reject) => {
+      try {
+        if (limit !== Number.POSITIVE_INFINITY && limit !== Number.NEGATIVE_INFINITY) {
+          if (limit === 0) return;
 
-      let index = 0;
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      for await (const _ of this) {
-        if (++index >= limit) break;
+          let index = 0;
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          for await (const _ of this) {
+            if (++index >= limit) break;
+          }
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-empty
+          for await (const _ of this) {
+          }
+        }
+        resolve();
+      } catch (error: any) {
+        reject(error instanceof FutureError ? error : new FutureError(error?.message ?? "Unknown"));
       }
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars,no-empty
-      for await (const _ of this) {
-      }
-    }
+    });
   }
 
   [Symbol.asyncIterator](): AsyncGenerator<T, any, unknown> {

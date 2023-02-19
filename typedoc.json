@@ -5,7 +5,7 @@
     "src/errors"
   ],
   "entryPointStrategy": "expand",
-  "out": "docs",
+  "out": "docs/internal",
   "theme": "my-theme",
   "darkHighlightTheme": "dark-plus",
   "plugin": [

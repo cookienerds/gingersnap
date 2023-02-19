@@ -73,7 +73,7 @@ export class Model {
    */
   public static fromBuffer<T extends Model>(
     data: Uint8Array | Buffer,
-    format: DataFormat = DataFormat.AVRO,
+    format: DataFormat = DataFormat.JSON,
     options?: { headers?: string[]; ignoreErrors?: boolean; array?: boolean; delimiter?: string; newline?: string }
   ): T | T[] {
     switch (format) {
@@ -116,7 +116,7 @@ export class Model {
    */
   public static async fromURL<T extends Model>(
     source: string,
-    format: DataFormat = DataFormat.AVRO,
+    format: DataFormat = DataFormat.JSON,
     options?: {
       headers?: string[];
       ignoreErrors?: boolean;
@@ -146,7 +146,7 @@ export class Model {
    */
   public static async fromBlob<T extends Model>(
     data: Blob,
-    format: DataFormat = DataFormat.AVRO,
+    format: DataFormat = DataFormat.JSON,
     options?: { headers?: string[]; ignoreErrors?: boolean; array?: boolean; delimiter?: string; newline?: string }
   ): Promise<T | T[]> {
     return this.fromBuffer<T>(new Uint8Array(await data.arrayBuffer()), format);
@@ -163,7 +163,7 @@ export class Model {
    */
   public static fromString<T extends Model>(
     data: string,
-    format: DataFormat = DataFormat.AVRO,
+    format: DataFormat = DataFormat.JSON,
     options?: { headers?: string[]; ignoreErrors?: boolean; array?: boolean; delimiter?: string; newline?: string }
   ): T | T[] {
     switch (format) {
