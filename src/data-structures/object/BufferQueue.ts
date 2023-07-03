@@ -1,5 +1,7 @@
 import { WatchableObject } from "./WatchableObject";
+import { TimeableObject } from "./TimeableObject";
 import { Future, Stream, WaitPeriod } from "../../utils";
+import * as R from "ramda";
 
 /**
  * Queue data structure that is iterable, but never can dequeue
@@ -7,11 +9,13 @@ import { Future, Stream, WaitPeriod } from "../../utils";
 export class BufferQueue<T> extends WatchableObject<number, T> {
   private tail: number;
   private head: number;
+  private readonly tracker: TimeableObject<string | number, number>;
 
   constructor(objectMaxSize?: number, expiryPeriod?: WaitPeriod) {
     super(objectMaxSize, expiryPeriod);
     this.tail = 0;
     this.head = 0;
+    this.tracker = new TimeableObject(objectMaxSize, expiryPeriod);
   }
 
   streamEntries(ignoreCache = false): Stream<T> {
@@ -25,9 +29,9 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
       return Future.of<T>((resolve, reject, signal) => {
         signal.onabort = this.on(
           pointer,
-          (v) => {
+          (v: any) => {
             pointer++;
-            resolve(v as any);
+            resolve(v);
           },
           false
         );
@@ -39,11 +43,17 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
     const obj: any = super.clone();
     obj.head = this.head;
     obj.tail = this.tail;
+    obj.tracker = this.tracker;
     return obj as BufferQueue<T>;
   }
 
-  enqueue(value: T) {
+  enqueue(value: T, tracker?: string | number) {
     this.set(this.tail, value);
+
+    if (!R.isNil(tracker)) {
+      this.tracker.set(tracker, this.tail);
+    }
+
     this.tail++;
     if (!this.has(this.head)) {
       this.head++;
@@ -54,6 +64,7 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
     super.clear();
     this.tail = 0;
     this.head = 0;
+    this.tracker.clear();
   }
 
   get empty() {
@@ -64,7 +75,11 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
     return this.tail - this.head;
   }
 
-  peek() {
-    return this.get(this.head);
+  peek(index?: number) {
+    return this.get(index ?? this.head);
+  }
+
+  findIndex(tracker: string | number) {
+    return this.tracker.get(tracker);
   }
 }

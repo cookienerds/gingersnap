@@ -4,7 +4,9 @@ import "reflect-metadata";
 import { DataFormat } from "../../model";
 
 interface ResponseDetails {
-  modelType: any;
+  modelType?: any;
+  modelTypeMapping?: { [string: string]: any };
+  modelTypeKeyPath?: string | Array<string | number>;
   isArray?: boolean;
   format?: DataFormat;
 }
@@ -23,7 +25,12 @@ export const createProps = (constructor: any) => {
 
 const createResponseDecorator =
   (type: ResponseType) =>
-  ({ modelType, format, isArray }: ResponseDetails = { modelType: String, isArray: false }) =>
+  (
+    { modelType, format, isArray, modelTypeMapping, modelTypeKeyPath }: ResponseDetails = {
+      modelType: String,
+      isArray: false,
+    }
+  ) =>
   (target: any, propertyKey: string) => {
     const proto = createProps(target.constructor);
     const lens = R.lensPath(["methodConfig", propertyKey, "responseType"]);
@@ -143,14 +150,15 @@ export const ThrottleBy = (value: ThrottleByProps) => (target: any, propertyKey:
  * @param type Credentials - Type of credentials that this authenticator should return
  * (BasicCredentials | BearerCredentials | APIKeyCredentials | define one of your own by subclassing Credentials)
  * @param global Whether this authenticator should be used across all services
+ * @param socketField
  * @constructor
  */
 export const Authenticator =
-  <T>(type: T, global = false) =>
+  <T>(type: T, global = false, socketField = "accessToken") =>
   (target: any, propertyKey: string) => {
     const proto = createProps(target.constructor);
     const lens = R.lensPath(["methodConfig", propertyKey, "authenticator"]);
-    proto.__internal__ = R.set(lens, { type, global }, proto.__internal__);
+    proto.__internal__ = R.over(lens, (v) => ({ ...(v ?? {}), type, global }), proto.__internal__);
   };
 
 /**
@@ -166,7 +174,7 @@ export const AuthRefresher =
   (target: any, propertyKey: string) => {
     const proto = createProps(target.constructor);
     const lens = R.lensPath(["methodConfig", propertyKey, "authRefresher"]);
-    proto.__internal__ = R.set(lens, { type, global }, proto.__internal__);
+    proto.__internal__ = R.over(lens, (v) => ({ ...(v ?? {}), type, global }), proto.__internal__);
   };
 
 /**
@@ -300,4 +308,14 @@ export const HeaderMap = (target: any, propertyKey: string, parameterIndex: numb
     R.compose(R.mergeLeft<any, any>({ [key]: parameterIndex }, R.__), R.or<any, any>(R.__, {})),
     proto.__internal__
   );
+};
+
+/**
+ * Disables any authenticator that should be applied to this method
+ * @constructor
+ */
+export const NoAuth = (target: any, propertyKey: string) => {
+  const proto = createProps(target.constructor);
+  const lens = R.lensPath(["methodConfig", propertyKey]);
+  proto.__internal__ = R.set(lens, (v) => ({ ...(v ?? {}), noAuth: true }), proto.__internal__);
 };

@@ -1,6 +1,5 @@
 import { Credentials } from "../model/credentials";
 import { DataFormat } from "../model";
-import { Decoder } from "../../utils/decoders/type";
 
 export enum RequestType {
   GET = "GET",
@@ -72,6 +71,7 @@ export interface MethodConfiguration {
     type: Credentials;
     global?: boolean;
   };
+  noAuth?: boolean;
   requestType?: RequestType;
   apiPath?: string;
   headers?: MapOfHeaders;

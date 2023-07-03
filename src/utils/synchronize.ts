@@ -1,5 +1,6 @@
-import { Future, WaitPeriod } from "./future";
+import { Future, FutureResult, WaitPeriod } from "./future";
 import { WaitableObject } from "../data-structures/object";
+import { ContextManager } from "./context";
 
 export class FutureEvent {
   private readonly __internal__: WaitableObject<any, any>;
@@ -18,6 +19,8 @@ export class FutureEvent {
         signal.onabort = this.__internal__.on("set", (v) => {
           if (v === true) resolve(this);
         });
+      } else {
+        resolve(this);
       }
     });
 
@@ -34,7 +37,7 @@ export class FutureEvent {
   }
 }
 
-export class Lock {
+export class Lock implements ContextManager<Lock> {
   private __locked__: boolean;
   private evt: FutureEvent;
 
@@ -45,6 +48,12 @@ export class Lock {
 
   get locked() {
     return this.__locked__;
+  }
+
+  with<K>(functor: (value: FutureResult<Lock>) => K) {
+    return this.acquire()
+      .thenApply(functor)
+      .finally(() => this.release());
   }
 
   public acquire(waitPeriod?: WaitPeriod): Future<Lock> {

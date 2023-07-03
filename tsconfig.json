@@ -2,7 +2,7 @@
   "compilerOptions": {
     "module": "ESNext",
     "noImplicitAny": false,
-    "moduleResolution": "NodeNext",
+    "moduleResolution": "node",
     "preserveConstEnums": true,
     "sourceMap": true,
     "strict": true,
@@ -12,16 +12,14 @@
     "emitDecoratorMetadata": true,
     "resolveJsonModule": true,
     "target": "es2015",
-    "outDir": "lib",
+    "declarationDir": "lib",
     "lib": [
       "dom",
-      "es2021.intl",
-      "es2015",
-      "es2018.asyncgenerator"
+      "esnext"
     ],
     "allowSyntheticDefaultImports": true,
     "allowJs": true
   },
-  "include": ["src/**/*", "tests/**/*"],
+  "include": ["src"],
   "exclude": ["node_modules"]
 }

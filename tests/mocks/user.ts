@@ -1,25 +1,25 @@
-import { Call } from "../../src";
 import {
-  Path,
-  Headers,
-  Header,
-  Query,
-  QueryMap,
-  JSONResponse,
-  XMLResponse,
   DELETE,
   GET,
+  Header,
+  HeaderMap,
+  Headers,
+  JSONBody,
+  JSONResponse,
+  PASS,
+  Path,
   POST,
   PUT,
+  Query,
+  QueryMap,
   Service,
-  HeaderMap,
   Throttle,
   ThrottleBy,
-  JSONBody,
-  PASS,
+  XMLResponse,
 } from "../../src/annotations/service";
-import { ArrayField, Field, Ignore, Model } from "../../src/annotations/model";
+import { ArrayField, Field, Ignore, MapField, Model } from "../../src/annotations/model";
 import "reflect-metadata";
+import { Call } from "../../src/utils";
 
 export class User extends Model {
   @Field() name!: string;
@@ -31,17 +31,32 @@ export class User extends Model {
   @Field()
   bestie?: User;
 
+  @Ignore()
+  @MapField(String, User)
+  friendsConnection!: Map<string, User>;
+
   updatedAt!: Date;
-  references!: number;
+  private ref!: number;
 
   @Field("updatedAt")
   private computeLastUpdate(value: string): void {
     this.updatedAt = new Date(value);
   }
 
+  // eslint-disable-next-line accessor-pairs
   @Field()
-  private totalReferences(value: number): void {
-    this.references = Number(value);
+  private set totalReferences(value: number) {
+    this.ref = Number(value);
+  }
+
+  @Field("totalReferences")
+  get references() {
+    return this.ref;
+  }
+
+  @Field("updatedAt")
+  private get updatedAtGetter() {
+    return this.updatedAt;
   }
 }
 

@@ -124,7 +124,7 @@ export class WebSocketService extends Service {
       };
     }, socketMethods);
 
-    void this.socket.open();
+    this.socket.open();
 
     const originalMethodConfig = internals.methodConfig;
     internals.methodConfig = R.fromPairs(

@@ -1,5 +1,6 @@
 import { WaitableObject } from "./WaitableObject";
 import { Future, Queue, Stream, WaitPeriod } from "../../utils";
+import * as R from "ramda";
 
 type GetListener<T> = (property: T) => void;
 type SetListener<T, K> = (property: T, oldValue: K | undefined, newValue: K) => void;
@@ -75,12 +76,14 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
         key: "*" as any,
       })
     );
+    const cleanup = R.once(() => {
+      cancelClear();
+      cancelSet();
+      cancelDelete();
+    });
+
     return new Stream<WatchableChange<T, K>>((signal) => {
-      signal.onabort = () => {
-        cancelClear();
-        cancelSet();
-        cancelDelete();
-      };
+      signal.onabort = cleanup;
       return queue.awaitDequeue(signal);
     });
   }
@@ -146,7 +149,7 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
   }
 
   get(key: T, defaultValue?: K | undefined) {
-    void Future.sleep(1)
+    Future.sleep(1)
       .thenApply(() => this.getListeners.forEach((listener) => listener(key)))
       .run();
     return super.get(key, defaultValue);
@@ -171,7 +174,7 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
 
   await(key: T, abort?: AbortSignal) {
     return super.await(key, abort).thenApply((value) => {
-      void Future.sleep(1)
+      Future.sleep(1)
         .thenApply(() => this.getListeners.forEach((listener) => listener(key)))
         .run();
       return value.value;
@@ -182,7 +185,7 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
     return super.on(
       key,
       (v) => {
-        void Future.sleep(1)
+        Future.sleep(1)
           .thenApply(() => this.getListeners.forEach((listener) => listener(key)))
           .run();
         callback(v);
@@ -192,7 +195,7 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
   }
 
   values(copy?: boolean) {
-    void Future.sleep(1)
+    Future.sleep(1)
       .thenApply(() => this.valuesListeners.forEach((listener) => listener()))
       .run();
     return super.values(copy);

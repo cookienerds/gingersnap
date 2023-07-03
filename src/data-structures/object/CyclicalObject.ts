@@ -5,18 +5,14 @@ import { Stream } from "../../utils";
  * Object that is cyclical - has can store M keys, after which new key value pairs added override
  * previous entries.
  */
-export class CyclicalObject<T, K> implements Iterable<[T, K]> {
+export class CyclicalObject<T, K> {
   /**
-   * Underlying javascript object
+   * Underlying javascript data structure
    * @private
    */
-  private readonly realTargetObject: Map<T, K>;
+  private target: K[];
 
-  /**
-   * Listing of all the keys added in order
-   * @private
-   */
-  private readonly indexes: T[];
+  private readonly keyMapping: Map<T, number>;
 
   /**
    * Pointer to the current index
@@ -29,12 +25,14 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
    * @private
    */
   protected readonly objectMaxSize?: number;
+  private readonly emptySlots: number[];
 
   public constructor(objectMaxSize?: number) {
-    this.realTargetObject = new Map();
-    this.indexes = new Array(objectMaxSize);
+    this.target = [];
+    this.keyMapping = new Map();
     this.pointer = -1;
     this.objectMaxSize = objectMaxSize;
+    this.emptySlots = [];
   }
 
   public static from<T, K>(data: Map<T, K> | Array<[T, K]> | { T: K }) {
@@ -57,7 +55,7 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
   }
 
   get stream() {
-    return Stream.of(this);
+    return Stream.of(this.target[Symbol.iterator]());
   }
 
   /**
@@ -66,8 +64,8 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
    * @param defaultValue
    */
   get(key: T, defaultValue: K | undefined = undefined) {
-    const result = this.realTargetObject.get(key);
-    return result !== undefined ? result : defaultValue;
+    const index = this.keyMapping.get(key);
+    return !R.isNil(index) ? this.target[index] : defaultValue;
   }
 
   /**
@@ -77,22 +75,23 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
    */
   set(key: T, value: K) {
     if (this.objectMaxSize) {
-      if (this.realTargetObject.has(key)) {
-        this.realTargetObject.set(key, value);
+      const index = this.keyMapping.get(key);
+      if (!R.isNil(index)) {
+        this.target[index] = value;
+        return;
+      } else if (this.emptySlots.length) {
+        const index = this.emptySlots.pop();
+        this.target[index!] = value;
         return;
       }
 
       this.pointer = this.objectMaxSize ? (this.pointer + 1) % this.objectMaxSize : this.pointer + 1;
-      const prop = this.indexes[this.pointer];
-      if (prop !== undefined) {
-        this.realTargetObject.delete(prop);
-      }
-
-      this.realTargetObject.set(key, value);
-      this.indexes[this.pointer] = key;
+      this.target[this.pointer] = value;
+      this.keyMapping.set(key, this.pointer);
       return;
     }
-    this.realTargetObject.set(key, value);
+    this.target.push(value);
+    this.keyMapping.set(key, this.target.length - 1);
   }
 
   /**
@@ -100,7 +99,11 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
    * @param key
    */
   delete(key: T) {
-    this.realTargetObject.delete(key);
+    const index = this.keyMapping.get(key);
+    if (!R.isNil(index)) {
+      this.emptySlots.push(index);
+      this.target[index] = undefined as any;
+    }
   }
 
   /**
@@ -108,19 +111,15 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
    * @param key
    */
   has(key: T) {
-    return this.realTargetObject.has(key);
+    return this.keyMapping.has(key);
   }
 
   /**
    * Iterates over each entry in the object by executing the provided callback on each entry
    * @param callback
    */
-  forEach(callback: (value: K, key: T, map: Map<T, K>) => void) {
-    this.realTargetObject.forEach(callback);
-  }
-
-  [Symbol.iterator]() {
-    return this.realTargetObject[Symbol.iterator]();
+  forEach(callback: (value: K, key: T) => void) {
+    Array.from(this.keyMapping.entries()).forEach(([key, index]) => callback(this.target[index], key));
   }
 
   /**
@@ -128,7 +127,8 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
    */
   clear() {
     this.pointer = -1;
-    this.realTargetObject.clear();
+    this.target = this.objectMaxSize ? new Array(this.objectMaxSize) : [];
+    this.keyMapping.clear();
   }
 
   /**
@@ -136,30 +136,29 @@ export class CyclicalObject<T, K> implements Iterable<[T, K]> {
    * @param copy Used to create a copied view of the values
    */
   values(copy?: boolean) {
-    const values = Array.from(this.realTargetObject.values());
-    return copy ? R.clone(values) : values;
+    return copy ? R.clone(this.target.filter((v) => v !== undefined)) : this.target.filter((v) => v !== undefined);
   }
 
   /**
    * Retrieves the keys that are stored in this object
    */
   keys() {
-    return this.realTargetObject.keys();
+    return this.keyMapping.keys();
   }
 
   /**
    * Retrieves the object size
    */
   size() {
-    return this.pointer > -1 ? this.pointer + 1 : this.realTargetObject.size;
+    return this.pointer > -1 ? this.pointer + 1 : this.keyMapping.size;
   }
 
   clone() {
     const obj: any = new (Object.getPrototypeOf(this).constructor)();
-    obj.realTargetObject = new Map(this.realTargetObject);
-    obj.indexes = [...this.indexes];
+    obj.target = R.clone(this.target);
     obj.pointer = this.pointer;
     obj.objectMaxSize = this.objectMaxSize;
+    obj.keyMapping = R.clone(this.keyMapping);
     return obj as CyclicalObject<T, K>;
   }
 }

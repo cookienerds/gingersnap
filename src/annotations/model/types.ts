@@ -2,12 +2,10 @@
  * Formatting used with converting data to models
  */
 export enum DataFormat {
-  AVRO,
   CSV,
   XML,
   JSON,
   MESSAGE_PACK,
-  CBOR,
 }
 
 /**

@@ -13,10 +13,12 @@ const createFieldUpdater =
     const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? {
       fields: new Map(),
     };
-    const field = R.find((v) => v.name === key, Array.from(props.fields.values()));
-    if (!field) throw new Error(`No field found that matches ${key}`);
+    const field = R.find((v) => v === key, Array.from(props.fields.keys()));
+    if (!field) {
+      throw new Error(`No field found that matches ${key}`);
+    }
 
-    functor({ field, target, key });
+    functor({ field: props.fields.get(field)!, target, key });
     props.parent = Object.getPrototypeOf(target).constructor.name;
     namespacedModelInternalProps.set(target.constructor.name, props);
   };
@@ -44,6 +46,141 @@ const createValidator = (functor: (v: any) => boolean, error: Error, updater?: (
   });
 
 /**
+ * A property that exist in the incoming data
+ * @param name Name of the property in the incoming data. If not provided, the variable name will be assumed as the
+ * property name
+ * @constructor
+ */
+export const Field = (name?: string) => (target: any, key: string) => {
+  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? {
+    fields: new Map(),
+  };
+  const type = Reflect.getMetadata("design:type", target, key);
+  const schema: any = {};
+  if (type instanceof Number) {
+    schema.dataType = DataType.DOUBLE;
+  } else if (type instanceof String) {
+    schema.dataType = DataType.STRING;
+  } else if (type instanceof Boolean) {
+    schema.dataType = DataType.BOOLEAN;
+  } else if (type instanceof Model) {
+    schema.dataType = DataType.RECORD;
+    schema.options = { recordClass: type };
+  }
+
+  const fieldProp = props.fields.get(key) ?? ({} as unknown as FieldProps);
+  fieldProp.name = name ?? key;
+  fieldProp.Type = type;
+  fieldProp.isArray = false;
+  fieldProp.schema = schema;
+  props.fields.set(key, fieldProp);
+  if (name) {
+    if (fieldProp.aliases) {
+      fieldProp.aliases.push(name);
+    } else {
+      fieldProp.aliases = [name];
+    }
+  }
+  props.parent = Object.getPrototypeOf(target).constructor.name;
+  namespacedModelInternalProps.set(target.constructor.name, props);
+};
+
+/**
+ * A property that exists on the incoming data, that contains an array of same data types
+ * @param type Type of data in the array
+ * @param name Name of the property in the incoming data. If not provided, the variable name will be assumed as the
+ * property name
+ * @constructor
+ */
+export const ArrayField = (type: any, name?: string) => (target: any, key: string) => {
+  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? {
+    fields: new Map(),
+  };
+  const schema: any = { dataType: DataType.ARRAY };
+  if (type instanceof Number) {
+    schema.itemType = DataType.DOUBLE;
+  } else if (type instanceof String) {
+    schema.itemType = DataType.STRING;
+  } else if (type instanceof Boolean) {
+    schema.itemType = DataType.BOOLEAN;
+  } else if (type instanceof Model) {
+    schema.options = { recordClass: type };
+  }
+
+  const fieldProp = props.fields.get(key) ?? ({} as unknown as FieldProps);
+  fieldProp.name = key;
+  fieldProp.Type = type;
+  fieldProp.isArray = true;
+  fieldProp.schema = schema;
+  props.fields.set(key, fieldProp);
+  if (name) {
+    if (fieldProp.aliases) {
+      fieldProp.aliases.push(name);
+    } else {
+      fieldProp.aliases = [name];
+    }
+  }
+
+  props.parent = Object.getPrototypeOf(target).constructor.name;
+  namespacedModelInternalProps.set(target.constructor.name, props);
+};
+
+/**
+ * A property that exists on the incoming data, that contains an object/array that can be represented as a hashmap
+ * @param keyType type for the keys in the map
+ * @param valueType type for the values in the map
+ * @param name optional name of the field
+ * @constructor
+ */
+export const MapField = (keyType: any, valueType: any, name?: string) => (target: any, key: string) => {
+  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? {
+    fields: new Map(),
+  };
+  const schema: any = { dataType: DataType.MAP };
+
+  const fieldProp = props.fields.get(key) ?? ({} as unknown as FieldProps);
+  fieldProp.name = key;
+  fieldProp.Type = Map;
+  fieldProp.isMap = true;
+  fieldProp.KeyType = keyType;
+  fieldProp.ValueType = valueType;
+  fieldProp.schema = schema;
+  props.fields.set(key, fieldProp);
+  if (name) {
+    props.fields.set(name, fieldProp);
+  }
+
+  props.parent = Object.getPrototypeOf(target).constructor.name;
+  namespacedModelInternalProps.set(target.constructor.name, props);
+};
+
+/**
+ * Alternative name for the associated field
+ * @param name
+ */
+export const Alias = (name: string) =>
+  createFieldUpdater(({ field }) => {
+    const aliases: string[] = field.aliases ?? [];
+    aliases.push(name);
+    field.aliases = aliases;
+  });
+
+/**
+ * Makes the given property only readable
+ * @constructor
+ */
+export const Readonly = (target: any, key: string) => {
+  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? {
+    fields: new Map(),
+  };
+  const fieldProps = props.fields.get(key) ?? ({} as unknown as FieldProps);
+  fieldProps.readonly = true;
+  props.fields.set(key, fieldProps);
+  props.parent = Object.getPrototypeOf(target).constructor.name;
+  namespacedModelInternalProps.set(target.constructor.name, props);
+};
+
+/**
  * Validates the value assigned to the associated property
  * @param matcher functor to check if the assigned value is valid
  */
@@ -52,6 +189,25 @@ export const Validator = (matcher: string | number | boolean | ((v: any) => bool
     matcher instanceof Function ? matcher : matcher instanceof RegExp ? (v) => matcher.test(v) : (v) => v === matcher,
     new InvalidValue(`Invalid value assigned`)
   );
+
+/**
+ * Raises an error if the field contains an error
+ * @constructor
+ */
+export const RaiseError = createFieldUpdater(({ field, target, key }) => {
+  const symbol = Symbol(key);
+  Object.defineProperty(target, key, {
+    get: function () {
+      return this[symbol];
+    },
+    set: function (v: any) {
+      if (v) {
+        throw v instanceof Error ? v : new Error(v);
+      }
+      this[symbol] = v;
+    },
+  });
+});
 
 /**
  * Ignores the annotated field during deserialization (by default) and/or serialization
@@ -67,78 +223,6 @@ export const Ignore = (value: IgnoreProps = { serialize: false, deserialize: tru
       options.optional = true;
       field.schema.options = options;
     }
-  });
-
-/**
- * A property that exist in the incoming data
- * @param name Name of the property in the incoming data. If not provided, the variable name will be assumed as the
- * property name
- * @constructor
- */
-export const Field = (name?: string) => (target: any, key: string) => {
-  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: new Map() };
-  const type = Reflect.getMetadata("design:type", target, key);
-  const schema: any = {};
-  if (type instanceof Number) {
-    schema.dataType = DataType.DOUBLE;
-  } else if (type instanceof String) {
-    schema.dataType = DataType.STRING;
-  } else if (type instanceof Boolean) {
-    schema.dataType = DataType.BOOLEAN;
-  } else if (type instanceof Model) {
-    schema.dataType = DataType.RECORD;
-    schema.options = { recordClass: type };
-  }
-
-  props.fields.set(name ?? key, {
-    name: key,
-    Type: type,
-    isArray: false,
-    schema,
-  });
-  props.parent = Object.getPrototypeOf(target).constructor.name;
-  namespacedModelInternalProps.set(target.constructor.name, props);
-};
-
-/**
- * A property that exists on the incoming data, that contains an array of same data types
- * @param type Type of data in the array
- * @param name Name of the property in the incoming data. If not provided, the variable name will be assumed as the
- * property name
- * @constructor
- */
-export const ArrayField = (type: any, name?: string) => (target: any, key: string) => {
-  const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? { fields: new Map() };
-  const schema: any = { dataType: DataType.ARRAY };
-  if (type instanceof Number) {
-    schema.itemType = DataType.DOUBLE;
-  } else if (type instanceof String) {
-    schema.itemType = DataType.STRING;
-  } else if (type instanceof Boolean) {
-    schema.itemType = DataType.BOOLEAN;
-  } else if (type instanceof Model) {
-    schema.options = { recordClass: type };
-  }
-
-  props.fields.set(name ?? key, {
-    name: key,
-    Type: type,
-    isArray: true,
-    schema,
-  });
-  props.parent = Object.getPrototypeOf(target).constructor.name;
-  namespacedModelInternalProps.set(target.constructor.name, props);
-};
-
-/**
- * Alternative name for the associated field
- * @param name
- */
-export const Alias = (name: string) =>
-  createFieldUpdater(({ field }) => {
-    const aliases: string[] = field.aliases ?? [];
-    aliases.push(name);
-    field.aliases = aliases;
   });
 
 /**

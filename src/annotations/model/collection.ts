@@ -1,4 +1,4 @@
-import { Stream } from "../../utils/stream";
+import { Stream } from "../../utils";
 import { Optional } from "../../utils/optional";
 import { Model } from "./model";
 

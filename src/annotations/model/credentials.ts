@@ -1,6 +1,7 @@
 import { Model } from "./model";
 import { MapOfHeaders } from "../service";
-import { Field } from "./property";
+import { Alias, Field, Ignore } from "./property";
+import { isNode } from "browser-or-node";
 
 /**
  * Class that represents credentials used for sending authorized requests
@@ -26,19 +27,33 @@ export class BearerCredentials extends Credentials {
   /**
    * JWT access token use for authenticated requests
    */
-  @Field()
+  @Alias("access_token")
+  @Field("accessToken")
   accessToken: string;
 
   /**
    * JWT refresh token used to retrieve new access token
    */
-  @Field()
+  @Alias("refresh_token")
+  @Field("refreshToken")
   refreshToken?: string;
 
-  constructor(accessToken: string, refreshToken?: string) {
+  /**
+   * Expiration date
+   */
+  @Ignore()
+  @Alias("expirationDate")
+  @Alias("expiration_date")
+  @Alias("expiryDate")
+  @Alias("exp")
+  @Field("expiry_date")
+  expirationDate?: Date;
+
+  constructor(accessToken: string, refreshToken?: string, expirationDate?: Date) {
     super();
     this.accessToken = accessToken;
     this.refreshToken = refreshToken;
+    this.expirationDate = expirationDate;
   }
 
   public buildAuthHeaders(): MapOfHeaders {
@@ -62,7 +77,8 @@ export class APIKeyCredentials extends Credentials {
   /**
    * API Key used for authenticated requests
    */
-  @Field()
+  @Alias("api_key")
+  @Field("apiKey")
   apiKey: string;
 
   constructor(apiKey: string) {
@@ -84,13 +100,13 @@ export class BasicCredentials extends Credentials {
   /**
    * Username for the authenticated user
    */
-  @Field()
+  @Field("username")
   username: string;
 
   /**
    * Password for the authenticated user
    */
-  @Field()
+  @Field("password")
   password: string;
 
   constructor(username: string, password: string) {
@@ -100,7 +116,13 @@ export class BasicCredentials extends Credentials {
   }
 
   public buildAuthHeaders(): MapOfHeaders {
-    const token = btoa(`${this.username}:${this.password}`);
+    let token: string;
+
+    if (isNode) {
+      token = Buffer.from(`${this.username}:${this.password}`).toString("base64");
+    } else {
+      token = btoa(`${this.username}:${this.password}`);
+    }
     return {
       Authorization: `Basic ${token}`,
     };

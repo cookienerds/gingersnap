@@ -133,6 +133,7 @@ export class Service {
                 let credentials: Credentials | undefined;
                 if (
                   resp.status === HTTPStatus.UNAUTHORIZED &&
+                  !value.noAuth &&
                   self[key] !== auth.authenticator &&
                   self[key] !== auth.authRefresher &&
                   (credentials = await this.__get_credentials__(auth))
