@@ -1,15 +1,16 @@
-import { NONE, ResponseType, ThrottleByProps } from "../annotations/service/types";
+import { NONE, ResponseType, ThrottleByProps } from "../annotations/service";
 import CallExecutionError from "../errors/CallExecutionError";
-import { Model } from "../annotations/model/model";
 import MissingArgumentsError from "../errors/MissingArgumentsError";
-import { DataFormat } from "../annotations/model";
+import { DataFormat, Model } from "../annotations/model";
 import { Executor, State, Stream } from "./stream";
 import { ExecutorState } from "./state";
 
 /**
  * Abstract Callable class with generic processing functionalities
  */
-export class Callable<T extends Model | Model[] | String | String[] | Blob | Blob[] | NONE> extends Stream<T> {
+export class Callable<
+  T extends Model | Model[] | String | String[] | string | string[] | Blob | Blob[] | NONE
+> extends Stream<T> {
   /**
    * Type of response body expected from the callback's Response Object
    * @protected
@@ -110,7 +111,7 @@ export class Callable<T extends Model | Model[] | String | String[] | Blob | Blo
 /**
  * A Callable structure for executing single network request
  */
-export class Call<T extends Model | Model[] | String | Blob | NONE> extends Callable<T> {
+export class Call<T extends Model | Model[] | String | string | string[] | Blob | NONE> extends Callable<T> {
   /**
    * Callback function to do post-processing once network request has successfully completed
    * @private

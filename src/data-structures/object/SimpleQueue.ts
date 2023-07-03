@@ -9,9 +9,18 @@ export class SimpleQueue<T> {
     this.tail = 0;
   }
 
-  enqueue(element) {
+  enqueue(element: T) {
     this.items.set(this.tail, element);
     this.tail++;
+  }
+
+  forEach(callback: (v: T) => void) {
+    while (!this.empty) {
+      const result = this.dequeue();
+      if (result === undefined) return;
+
+      callback(result);
+    }
   }
 
   dequeue() {

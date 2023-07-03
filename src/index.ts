@@ -1,1 +1,1 @@
-export * from "./annotations";
+export { GingerSnap, GingerSnapProps } from "./annotations";

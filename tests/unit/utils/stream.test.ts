@@ -1,4 +1,4 @@
-import { Stream } from "../../../src/utils/stream";
+import { Stream } from "../../../src/utils";
 import userData from "../../data/users.json";
 import * as R from "ramda";
 

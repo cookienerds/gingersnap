@@ -4,12 +4,11 @@ import X2JS from "x2js";
 import "reflect-metadata";
 import { DataFormat, DataType } from "./types";
 import Papa from "papaparse";
-import { decode as cborDecode, encode as cborEncode } from "cborg";
 import { decode as msgUnpack, encode as msgPack } from "@msgpack/msgpack";
-import avro from "avsc";
 import NetworkError from "../../errors/NetworkError";
-import NotImplemented from "../../errors/NotImplemented";
-import InvalidValue from "../../errors/InvalidValue";
+import { parse } from "../../utils/parser";
+
+export type ModelConstructor<T extends Model> = (new () => T) & typeof Model;
 
 /**
  * Properties for handling de/serialization process for each property on a model
@@ -31,7 +30,11 @@ export interface FieldProps {
   ignore?: IgnoreProps;
   name: string;
   Type: any;
-  isArray: boolean;
+  KeyType?: any;
+  ValueType?: any;
+  isArray?: boolean;
+  isMap?: boolean;
+  readonly?: boolean;
   aliases?: string[];
   schema?: {
     dataType: DataType;
@@ -55,8 +58,6 @@ export interface ModelInternalProps {
 /** @ignore */
 export const namespacedModelInternalProps = new Map<string, ModelInternalProps>();
 
-const modelSchema = new Map<string, { json?: any; avro?: any }>();
-
 /**
  * A Data de/serializer class that manages and validates data as JavaScript Objects
  */
@@ -72,26 +73,20 @@ export class Model {
    * @returns new model or an array of models
    */
   public static fromBuffer<T extends Model>(
+    this: ModelConstructor<T>,
     data: Uint8Array | Buffer,
     format: DataFormat = DataFormat.JSON,
     options?: { headers?: string[]; ignoreErrors?: boolean; array?: boolean; delimiter?: string; newline?: string }
   ): T | T[] {
     switch (format) {
-      case DataFormat.AVRO:
-      case DataFormat.MESSAGE_PACK:
-      case DataFormat.CBOR: {
-        const decoder =
-          format === DataFormat.CBOR
-            ? cborDecode
-            : format === DataFormat.AVRO
-            ? (avro.Type.forSchema(this.schema(DataFormat.AVRO)).fromBuffer as (v: Uint8Array | Buffer) => any)
-            : msgUnpack;
+      case DataFormat.MESSAGE_PACK: {
+        const decoder = msgUnpack;
         const result = decoder(data);
         if (options?.array && !(result instanceof Array)) throw new ParsingError([], "expected an array of models");
         if (!options?.array && result instanceof Array) throw new ParsingError([], "expected only one model");
 
         if (result instanceof Array) return result.map((v: any) => this.fromJSON<T>(v));
-        return this.fromJSON<T>(result);
+        return this.fromJSON<T>(result as any);
       }
       case DataFormat.CSV: {
         const text = data instanceof Uint8Array ? new TextDecoder().decode(data.buffer) : (data as Buffer).toString();
@@ -115,6 +110,7 @@ export class Model {
    * @returns one or more models
    */
   public static async fromURL<T extends Model>(
+    this: ModelConstructor<T>,
     source: string,
     format: DataFormat = DataFormat.JSON,
     options?: {
@@ -145,6 +141,7 @@ export class Model {
    * @returns one or more models
    */
   public static async fromBlob<T extends Model>(
+    this: ModelConstructor<T>,
     data: Blob,
     format: DataFormat = DataFormat.JSON,
     options?: { headers?: string[]; ignoreErrors?: boolean; array?: boolean; delimiter?: string; newline?: string }
@@ -162,28 +159,39 @@ export class Model {
    * @param options
    */
   public static fromString<T extends Model>(
+    this: ModelConstructor<T>,
     data: string,
     format: DataFormat = DataFormat.JSON,
     options?: { headers?: string[]; ignoreErrors?: boolean; array?: boolean; delimiter?: string; newline?: string }
   ): T | T[] {
     switch (format) {
       case DataFormat.JSON:
-        return this.fromJSON<T>(JSON.parse(data));
+        try {
+          data = JSON.parse(data);
+        } catch (e: any) {
+          throw new ParsingError(e?.message ?? String(e));
+        }
+        return this.fromJSON(data as any);
       case DataFormat.XML:
-        return this.fromObject<T>(this.__xmlParser__.xml2js(data), true);
+        return this.fromObject<T>(this.__xmlParser__.xml2js(data), format);
       case DataFormat.CSV: {
+        let result: Papa.ParseResult<any>;
         let text = data;
         if (options?.headers) text = options.headers.join(options?.delimiter ?? ",") + (options.newline ?? "\n") + text;
 
-        const result = Papa.parse<T>(text, {
-          header: true,
-          skipEmptyLines: true,
-        });
+        try {
+          result = Papa.parse<T>(text, {
+            header: true,
+            skipEmptyLines: true,
+          });
+        } catch (e: any) {
+          throw new ParsingError([], e?.message ?? String(e));
+        }
 
         if (!options?.ignoreErrors && result.errors.length > 0) throw new ParsingError(result.errors);
         if (!options?.array && result.data.length > 0) throw new ParsingError([], "Too many records found");
 
-        if (options?.array) return result.data.map((v) => this.fromObject<T>(v));
+        if (options?.array) return result.data.map((v) => this.fromObject(v));
         return this.fromObject<T>(result.data[0]);
       }
       default:
@@ -196,20 +204,8 @@ export class Model {
    * @param data JSON Object
    * @returns new model
    */
-  public static fromJSON<T extends Model>(data: Object): T {
-    return this.fromObject(data, false);
-  }
-
-  /**
-   * Retrieves the schema layout for the current model class
-   * @remarks
-   * Currently only AVRO schema is supported
-   *
-   * @param format data format that the schema is associated with
-   * @returns the model's schema
-   */
-  public static schema(format: DataFormat = DataFormat.JSON) {
-    return this.schemaWithCache(format);
+  public static fromJSON<T extends Model>(this: ModelConstructor<T>, data: object): T {
+    return this.fromObject<T>(data, DataFormat.JSON);
   }
 
   /**
@@ -230,6 +226,8 @@ export class Model {
           // failed to serialize map to object, which means it contains keys that are not serializable to object
           return value;
         }
+      } else if (value instanceof Function) {
+        return null;
       }
       return value;
     };
@@ -238,10 +236,10 @@ export class Model {
       (acc, [key, fieldProps]) => {
         if (fieldProps.ignore?.serialize) return acc;
 
-        const value: any = R.prop(fieldProps.name as any, this);
+        const value: any = R.prop(key as any, this);
         const serializedValue = serialize(value);
         if (!removeMissingFields || (serializedValue !== null && serializedValue !== undefined)) {
-          acc[key] = serializedValue;
+          acc[fieldProps.name] = serializedValue;
         }
         return acc;
       },
@@ -279,26 +277,11 @@ export class Model {
   }
 
   /**
-   * Generates avro format for the data stored in the model
-   */
-  public avro(removeMissingFields = false): Buffer {
-    return avro.Type.forSchema(this.schema(DataFormat.AVRO)).toBuffer(this.object(removeMissingFields));
-  }
-
-  /**
    * Converts the current model to message pack binary format
    * @returns message pack binary
    */
   public messagePack(removeMissingFields = false): Buffer {
     return msgPack(this.object(removeMissingFields)).buffer as Buffer;
-  }
-
-  /**
-   * Converts the current model to CBOR binary format
-   * @returns cbor binary
-   */
-  public cbor(removeMissingFields = false): Buffer {
-    return cborEncode(this.object(removeMissingFields));
   }
 
   /**
@@ -309,6 +292,15 @@ export class Model {
    */
   public csv(removeMissingFields = false, config?: Papa.UnparseConfig): string {
     return Papa.unparse([this.object(removeMissingFields)], config);
+  }
+
+  public clone() {
+    const newModel = new (Object.getPrototypeOf(this))();
+    for (const [key, value] of Object.entries(this)) {
+      newModel[key] = !R.isNil(value) ? R.clone(value) : value;
+    }
+
+    return newModel;
   }
 
   /**
@@ -351,16 +343,16 @@ export class Model {
   /**
    * Constructs a model from a JSON object
    * @param data JSON object
-   * @param xml Whether this JSON object was derived from XML (used to properly parse missing data issues)
+   * @param format
    * @private
    */
-  private static fromObject<T extends Model>(data: Object, xml: boolean = false): T {
+  private static fromObject<T extends Model>(data: Object, format: DataFormat = DataFormat.JSON): T {
+    if (data instanceof Array || typeof data !== "object") {
+      throw new ParsingError([], "Invalid data provided. Must be an object");
+    }
+
     const model: any = new this();
     const props: ModelInternalProps = this.buildPropTree(Object.getPrototypeOf(model));
-
-    if (xml && typeof (data as any) === "string") {
-      data = {};
-    }
 
     R.forEach(([key, fieldProps]: [string, FieldProps]) => {
       let value = data[key];
@@ -380,22 +372,93 @@ export class Model {
         return;
       }
 
-      if (fieldProps.isArray && fieldProps.Type.prototype instanceof Model) {
-        if (!(value instanceof Array) && !xml) {
-          throw new ParsingError([], `value for ${key} is expected to be an Array, instead received ${typeof value}`);
-        } else if (!(value instanceof Array) && xml) {
-          value = value === "" ? [] : [value];
-        }
-        model[fieldProps.name] = value.map((v) => fieldProps.Type.fromObject(v, xml));
+      if (Object.getOwnPropertyDescriptor(Object.getPrototypeOf(model), key)?.set) {
+        model[key] = value;
+      } else if (Object.getOwnPropertyDescriptor(Object.getPrototypeOf(model), key)?.get) {
+        return;
+      } else if (
+        model[key] instanceof fieldProps.Type &&
+        typeof model[key] === "function" &&
+        fieldProps.Type instanceof Function
+      ) {
+        model[key](value);
+      } else if (fieldProps.isArray && fieldProps.Type.prototype instanceof Model) {
+        const parser = parse({
+          string: (v) => fieldProps.Type.fromString(v, format),
+          object: (v) => fieldProps.Type.fromObject(v, format),
+          default: () => {
+            throw new ParsingError([], `value for ${key} is expected to be an Array, instead received ${typeof value}`);
+          },
+          supportArray: true,
+        });
+        model[key] = parser(value);
       } else if (fieldProps.Type.prototype instanceof Model) {
-        model[fieldProps.name] = fieldProps.Type.fromObject(value, xml);
-      } else if (fieldProps.isArray) {
-        if (!(value instanceof Array) && !xml) {
-          throw new ParsingError([], `value for ${key} is expected to be an Array, instead received ${typeof value}`);
-        } else if (!(value instanceof Array) && xml) {
-          value = [value];
+        const parser = parse({
+          string: (v) => fieldProps.Type.fromString(v, format),
+          object: (v) => fieldProps.Type.fromObject(v, format),
+          default: () => {
+            throw new ParsingError([], `value for ${key} expected to be serializable object`);
+          },
+        });
+        const result = parser(value);
+
+        if (result instanceof Array) {
+          throw new ParsingError([], `value for ${key} expected to be serializable object, not an array`);
         }
-        model[fieldProps.name] = value.map((v) => {
+        model[key] = result;
+      } else if (fieldProps.isMap && fieldProps.ValueType.prototype instanceof Model) {
+        const parser = parse({
+          string: (v) => fieldProps.ValueType.fromString(v, format),
+          object: (v) => fieldProps.ValueType.fromObject(v, format),
+          default: () => {
+            throw new ParsingError([], `value for ${key} expected to be serializable object`);
+          },
+        });
+
+        try {
+          const data = new Map(
+            (!(value instanceof Array) && typeof value === "object" ? Object.entries(value) : value).map(([k, v]) => [
+              fieldProps.KeyType(k),
+              v,
+            ])
+          );
+          data.forEach((value, key) => {
+            data.set(key, parser(value));
+          });
+          model[key] = data;
+        } catch (e: any) {
+          if (e instanceof ParsingError) throw e;
+          throw new ParsingError([], e?.message ?? String(e));
+        }
+      } else if (fieldProps.isMap) {
+        try {
+          const data = new Map(
+            (!(value instanceof Array) && typeof value === "object" ? Object.entries(value) : value).map(([k, v]) => [
+              fieldProps.KeyType(k),
+              v,
+            ])
+          );
+          model[key] = data;
+          data.forEach((value, key) => {
+            data.set(key, parse({ default: (v) => new fieldProps.Type(v) }, value));
+          });
+        } catch (e: any) {
+          if (e instanceof ParsingError) throw e;
+          throw new ParsingError([], e?.message ?? String(e));
+        }
+      } else if (fieldProps.isArray) {
+        if (typeof value === "string") {
+          try {
+            value = JSON.parse(value);
+          } catch (e: any) {
+            throw new ParsingError([], e?.message ?? String(e));
+          }
+        }
+        if (!(value instanceof Array)) {
+          throw new ParsingError([], `value for ${key} is expected to be an Array, instead received ${typeof value}`);
+        }
+
+        model[key] = value.map((v) => {
           switch (typeof v) {
             case "boolean":
             case "number":
@@ -403,172 +466,75 @@ export class Model {
             case "undefined":
             case "string":
               return v;
-            default:
-              return new fieldProps.Type(v);
+            default: {
+              let val: any;
+              try {
+                val = new fieldProps.Type(v);
+              } catch (e: any) {
+                if (e instanceof ParsingError) {
+                  throw e;
+                }
+                throw new ParsingError([], e?.message ?? String(e));
+              }
+              if (isNaN(val.getTime())) {
+                throw new ParsingError([], "Failed to convert to annotated  date type");
+              }
+              return val;
+            }
           }
         });
-      } else if (
-        model[fieldProps.name] instanceof fieldProps.Type &&
-        typeof model[fieldProps.name] === "function" &&
-        fieldProps.Type instanceof Function
-      ) {
-        model[fieldProps.name](value);
       } else if (fieldProps.Type?.name === "String") {
-        model[fieldProps.name] = String(value);
+        model[key] = String(value);
       } else if (fieldProps.Type?.name === "Boolean") {
-        model[fieldProps.name] = Boolean(value);
+        model[key] = Boolean(value);
       } else if (fieldProps.Type?.name === "Number") {
-        model[fieldProps.name] = Number(value);
+        model[key] = Number(value);
       } else if (fieldProps.Type?.name === "Map") {
         const valueType = typeof value;
         switch (valueType) {
           case "object": {
-            model[fieldProps.name] = value instanceof Array ? new Map(value) : new Map(Object.entries(value));
+            try {
+              model[key] = value instanceof Array ? new Map(value) : new Map(Object.entries(value));
+            } catch (e: any) {
+              throw new ParsingError([], e?.message ?? String(e));
+            }
             break;
           }
           case "string":
-            value = JSON.parse(value);
-            model[fieldProps.name] = value instanceof Array ? new Map(value) : new Map(Object.entries(value));
+            try {
+              value = JSON.parse(value);
+              model[key] = value instanceof Array ? new Map(value) : new Map(Object.entries(value));
+            } catch (e: any) {
+              throw new ParsingError([], e?.message ?? String(e));
+            }
             break;
           default:
             throw new ParsingError([value], `value for ${key} cannot be converted to a Map`);
         }
       } else if (fieldProps.Type?.name === "Set") {
         if (value instanceof Array) {
-          model[fieldProps.name] = new Set(value);
+          model[key] = new Set(value);
         } else if (typeof value === "string") {
-          model[fieldProps.name] = new Set(JSON.parse(value));
+          model[key] = new Set(JSON.parse(value));
         }
         throw new ParsingError([value], `value for ${key} cannot be converted to a Set`);
       } else {
-        model[fieldProps.name] = new fieldProps.Type(value);
+        model[key] = new fieldProps.Type(value);
+      }
+
+      if (fieldProps.readonly) {
+        Object.defineProperty(model, key, {
+          value: model[key],
+          writable: false,
+          enumerable: true,
+        });
       }
 
       R.forEach(([k, v]) => {
-        if (v.__callback__) v.__callback__(k, v.properties, model, fieldProps.name);
+        if (v.__callback__) v.__callback__(k, v.properties, model, key);
       }, R.toPairs(fieldProps.customTags ?? {}));
     }, Array.from(props.fields.entries()));
 
-    return model as T;
-  }
-
-  /** @ignore */
-  private static schemaWithCache(format: DataFormat = DataFormat.JSON, visitedRecords = new Map<string, any>()) {
-    const model: any = new this();
-    const schemas = modelSchema.get(model.constructor.name) ?? {};
-
-    switch (format) {
-      case DataFormat.AVRO: {
-        if (schemas.avro) return schemas.avro;
-        const className: string = model.constructor.name;
-        const props: ModelInternalProps = this.buildPropTree(Object.getPrototypeOf(model));
-        const avro: any = {
-          type: "record",
-          name: className,
-          fields: [],
-        };
-        visitedRecords.set(className, avro.fields);
-
-        R.forEach(([k, v]) => {
-          const schemaDetails = v.schema;
-          const field: any = {
-            name: k,
-            type: "" as any,
-          };
-          const name = className + k.charAt(0).toUpperCase() + k.substring(1);
-
-          if (!schemaDetails) return;
-
-          switch (schemaDetails.dataType) {
-            case DataType.ENUM: {
-              field.type = {
-                type: schemaDetails.options?.optional ? [DataType.NULL, DataType.ENUM] : DataType.ENUM,
-                aliases: schemaDetails.aliases,
-                symbols: schemaDetails.options?.values ?? [],
-                name,
-              };
-              break;
-            }
-            case DataType.FIXED_STRING: {
-              field.type = {
-                type: schemaDetails.options?.optional ? [DataType.NULL, DataType.FIXED_STRING] : DataType.FIXED_STRING,
-                aliases: schemaDetails.aliases,
-                size: schemaDetails.options?.length ?? 0,
-                name,
-              };
-              break;
-            }
-            case DataType.MAP: {
-              field.type = {
-                type: schemaDetails.options?.optional ? [DataType.NULL, DataType.MAP] : DataType.MAP,
-                values: schemaDetails.options?.itemType ?? "",
-                aliases: schemaDetails.aliases,
-                default: {},
-                name,
-              };
-              break;
-            }
-            case DataType.ARRAY: {
-              if (schemaDetails.options?.recordClass) {
-                field.type = {
-                  type: schemaDetails.options?.optional ? [DataType.NULL, DataType.ARRAY] : DataType.ARRAY,
-                  aliases: schemaDetails.aliases,
-                  default: [],
-                  name,
-                };
-                const visited = visitedRecords.get(schemaDetails.options.recordClass.constructor.name);
-                if (visited) {
-                  field.type.items = {
-                    type: DataType.RECORD,
-                    name: name + "Record",
-                    fields: visited,
-                  };
-                } else {
-                  field.type.items = schemaDetails.options.recordClass.schemaWithCache(format, visitedRecords);
-                }
-                visitedRecords.set(schemaDetails.options.recordClass.constructor.name, field.type.items.fields);
-              } else {
-                field.type = {
-                  type: schemaDetails.options?.optional ? [DataType.NULL, DataType.ARRAY] : DataType.ARRAY,
-                  items: schemaDetails.options?.itemType ?? "",
-                  aliases: schemaDetails.aliases,
-                  default: [],
-                  name,
-                };
-              }
-              break;
-            }
-            case DataType.RECORD: {
-              if (!schemaDetails.options?.recordClass) {
-                throw new InvalidValue("class description for record type is missing");
-              }
-              const visited = visitedRecords.get(schemaDetails.options.recordClass.constructor.name);
-              if (visited) {
-                field.type = {
-                  type: schemaDetails.options?.optional ? [DataType.NULL, DataType.RECORD] : DataType.RECORD,
-                  name,
-                  fields: visited,
-                };
-              } else {
-                field.type = schemaDetails.options.recordClass.schemaWithCache(format, visitedRecords);
-              }
-              visitedRecords.set(schemaDetails.options.recordClass.constructor.name, field.type.fields);
-              break;
-            }
-            default: {
-              field.type = schemaDetails.dataType;
-              field.aliases = schemaDetails.aliases;
-            }
-          }
-          avro.fields.push(field);
-        }, Array.from(props.fields.entries()));
-
-        schemas.avro = avro;
-        modelSchema.set(model.constructor.name, schemas);
-        return schemas.avro;
-      }
-      default:
-        throw new NotImplemented("data format schema not implemented");
-    }
+    return Object.seal(model) as T;
   }
 }

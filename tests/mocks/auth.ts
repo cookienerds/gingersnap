@@ -10,8 +10,8 @@ import {
   POST,
   Service,
 } from "../../src/annotations/service";
-import { Call } from "../../src";
 import { BearerCredentials } from "../../src/annotations/model/credentials";
+import { Call } from "../../src/utils";
 
 export class AuthService extends Service {
   @POST("api/v1/auth/login")

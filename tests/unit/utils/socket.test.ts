@@ -68,7 +68,7 @@ describe("Browser WebSocket", function () {
     await Future.waitFor(socket.open(), { seconds: 1 });
     testMessages.forEach((message) => server.send(message));
 
-    void Future.sleep({ seconds: 1 })
+    Future.sleep({ seconds: 1 })
       .thenApply(() => socket.close())
       .schedule();
     const responseMessage = await socket
@@ -82,7 +82,7 @@ describe("Browser WebSocket", function () {
 
   it("should retry connection", async () => {
     const socket = new StreamableWebSocket<Blob>(url2, blobDecoder);
-    void socket.open().schedule();
+    socket.open().schedule();
     await Future.sleep({ seconds: 1 });
     expect(socket.opened).toBeFalsy();
     const server2 = new WS(url2);

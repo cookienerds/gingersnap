@@ -1,4 +1,3 @@
-import { Call } from "../../src";
 import {
   GET,
   POST,
@@ -22,6 +21,7 @@ import {
 } from "../../src/annotations/service";
 import { User } from "./user";
 import { BasicCredentials } from "../../src/annotations/model/credentials";
+import { Call } from "../../src/utils";
 
 @BaseUrl("https://test.com")
 export class UtilService extends Service {

@@ -1,4 +1,4 @@
-module.exports = {
+export default {
   preset: "ts-jest/presets/js-with-ts",
   testEnvironment: "jsdom",
   coverageReporters: ["html", "text", "text-summary", "cobertura"],
