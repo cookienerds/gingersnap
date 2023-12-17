@@ -130,6 +130,10 @@ describe("Test Network Service", function () {
     const resp = await service.createUser(User.fromJSON(MOCKED_USERS[0])).execute();
     expect(resp instanceof User).toBeTruthy();
     expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
+
+    const resp2 = await service.createUser2('test').execute();
+    expect(resp2 instanceof User).toBeTruthy();
+    expect(resp2.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
   });
 
   it("should delete user", async () => {

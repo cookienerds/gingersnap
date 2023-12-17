@@ -7,6 +7,7 @@ import Papa from "papaparse";
 import { decode as msgUnpack, encode as msgPack } from "@msgpack/msgpack";
 import NetworkError from "../../errors/NetworkError";
 import { parse } from "../../utils/parser";
+import { NoSuchElement } from "../../errors/NoSuchElement";
 
 export type ModelConstructor<T extends Model> = (new () => T) & typeof Model;
 
@@ -38,7 +39,7 @@ export interface FieldProps {
   aliases?: string[];
   schema?: {
     dataType: DataType;
-    options?: { values?: string[]; length?: number; itemType?: string; recordClass?: any; optional?: boolean };
+    options?: { values?: string[]; length?: number; itemType?: string; recordClass?: any; optional?: boolean, useOptionalObj?: boolean; };
     aliases?: string[];
   };
   customTags?: {
@@ -57,6 +58,48 @@ export interface ModelInternalProps {
 
 /** @ignore */
 export const namespacedModelInternalProps = new Map<string, ModelInternalProps>();
+
+
+/**
+ * A container object which may or may not contain a non-null/non-undefined value
+ */
+export class Optional<T> {
+  constructor(private readonly value: T | undefined) {}
+
+  /**
+   * Returns an Optional with the specified present non-null value.
+   * @param value
+   */
+  static of<T>(value: T | undefined) {
+    return new Optional(value);
+  }
+
+  /**
+   * Returns an empty Optional instance.
+   */
+  static empty<T>() {
+    return new Optional<T>(undefined);
+  }
+
+  /**
+   * Return true if there is a value present, otherwise false.
+   */
+  isPresent() {
+    return this.value !== undefined && this.value !== null;
+  }
+
+  /**
+   * If a value is present in this Optional, returns the value, otherwise throws NoSuchElement.
+   */
+  get() {
+    if (this.isPresent()) {
+      return this.value as T;
+    }
+
+    throw new NoSuchElement();
+  }
+}
+
 
 /**
  * A Data de/serializer class that manages and validates data as JavaScript Objects
@@ -351,6 +394,12 @@ export class Model {
       throw new ParsingError([], "Invalid data provided. Must be an object");
     }
 
+    const processValue = (fieldProps: FieldProps, value: any) => {
+      if (fieldProps.schema?.options?.useOptionalObj) {
+        return Optional.of(value);
+      }
+      return value;
+    }
     const model: any = new this();
     const props: ModelInternalProps = this.buildPropTree(Object.getPrototypeOf(model));
 
@@ -365,6 +414,9 @@ export class Model {
       }
 
       if ((value === undefined || value === null) && fieldProps.ignore?.deserialize) {
+        if (fieldProps.schema?.options?.useOptionalObj) {
+          model[key] = Optional.empty();
+        }
         return;
       } else if ((value === undefined || value === null) && (model[key] === undefined || model[key] === null)) {
         throw new ParsingError([], `Property ${key} is missing from the data provided`);
@@ -373,7 +425,7 @@ export class Model {
       }
 
       if (Object.getOwnPropertyDescriptor(Object.getPrototypeOf(model), key)?.set) {
-        model[key] = value;
+        model[key] = processValue(fieldProps, value);
       } else if (Object.getOwnPropertyDescriptor(Object.getPrototypeOf(model), key)?.get) {
         return;
       } else if (
@@ -391,7 +443,7 @@ export class Model {
           },
           supportArray: true,
         });
-        model[key] = parser(value);
+        model[key] = processValue(fieldProps, parser(value));
       } else if (fieldProps.Type.prototype instanceof Model) {
         const parser = parse({
           string: (v) => fieldProps.Type.fromString(v, format),
@@ -405,7 +457,7 @@ export class Model {
         if (result instanceof Array) {
           throw new ParsingError([], `value for ${key} expected to be serializable object, not an array`);
         }
-        model[key] = result;
+        model[key] = processValue(fieldProps, result);
       } else if (fieldProps.isMap && fieldProps.ValueType.prototype instanceof Model) {
         const parser = parse({
           string: (v) => fieldProps.ValueType.fromString(v, format),
@@ -425,7 +477,7 @@ export class Model {
           data.forEach((value, key) => {
             data.set(key, parser(value));
           });
-          model[key] = data;
+          model[key] = processValue(fieldProps, data);
         } catch (e: any) {
           if (e instanceof ParsingError) throw e;
           throw new ParsingError([], e?.message ?? String(e));
@@ -438,7 +490,7 @@ export class Model {
               v,
             ])
           );
-          model[key] = data;
+          model[key] = processValue(fieldProps, data);
           data.forEach((value, key) => {
             data.set(key, parse({ default: (v) => new fieldProps.Type(v) }, value));
           });
@@ -458,7 +510,7 @@ export class Model {
           throw new ParsingError([], `value for ${key} is expected to be an Array, instead received ${typeof value}`);
         }
 
-        model[key] = value.map((v) => {
+        model[key] = processValue(fieldProps, value.map((v) => {
           switch (typeof v) {
             case "boolean":
             case "number":
@@ -482,19 +534,19 @@ export class Model {
               return val;
             }
           }
-        });
+        }));
       } else if (fieldProps.Type?.name === "String") {
-        model[key] = String(value);
+        model[key] = processValue(fieldProps, String(value));
       } else if (fieldProps.Type?.name === "Boolean") {
-        model[key] = Boolean(value);
+        model[key] = processValue(fieldProps, Boolean(value));
       } else if (fieldProps.Type?.name === "Number") {
-        model[key] = Number(value);
+        model[key] = processValue(fieldProps, Number(value));
       } else if (fieldProps.Type?.name === "Map") {
         const valueType = typeof value;
         switch (valueType) {
           case "object": {
             try {
-              model[key] = value instanceof Array ? new Map(value) : new Map(Object.entries(value));
+              model[key] = processValue(fieldProps, value instanceof Array ? new Map(value) : new Map(Object.entries(value)));
             } catch (e: any) {
               throw new ParsingError([], e?.message ?? String(e));
             }
@@ -503,7 +555,7 @@ export class Model {
           case "string":
             try {
               value = JSON.parse(value);
-              model[key] = value instanceof Array ? new Map(value) : new Map(Object.entries(value));
+              model[key] = processValue(fieldProps, value instanceof Array ? new Map(value) : new Map(Object.entries(value)));
             } catch (e: any) {
               throw new ParsingError([], e?.message ?? String(e));
             }
@@ -513,13 +565,13 @@ export class Model {
         }
       } else if (fieldProps.Type?.name === "Set") {
         if (value instanceof Array) {
-          model[key] = new Set(value);
+          model[key] = processValue(fieldProps, new Set(value));
         } else if (typeof value === "string") {
-          model[key] = new Set(JSON.parse(value));
+          model[key] = processValue(fieldProps, new Set(JSON.parse(value)));
         }
         throw new ParsingError([value], `value for ${key} cannot be converted to a Set`);
       } else {
-        model[key] = new fieldProps.Type(value);
+        model[key] = processValue(fieldProps, new fieldProps.Type(value));
       }
 
       if (fieldProps.readonly) {

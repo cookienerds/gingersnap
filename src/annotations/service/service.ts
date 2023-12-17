@@ -217,16 +217,45 @@ export class Service {
 
       if (value.parameters.body?.type) {
         switch (value.parameters.body.type) {
-          case BodyType.JSON:
           case BodyType.STRING: {
-            if (value.parameters.body.type === BodyType.JSON) {
-              headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
-            }
-            const index = value.parameters.body.parameterIndex;
+            const index = value.parameters.body.parameterIndex ?? -1;
             if (args[index] === undefined) {
               throw new CallExecutionError(`body parameter is missing at index ${index}`);
             }
             body = this.convertToJSON(args[index]);
+            break;
+          }
+          case BodyType.JSON: {
+            headers["Content-Type"] = headers["Content-Type"] ?? "application/json";
+            const index = value.parameters.body.parameterIndex ?? -1;
+            let data: any = {};
+
+            if (args[index] === undefined) {
+              const fields = value.parameters.body.fields;
+
+              if (!fields) {
+                throw new CallExecutionError(`body parameter is missing at index ${index}`);
+              }
+
+              R.forEach(([key, index]: [string, number]) => {
+                const arg = args[index];
+                if (arg === undefined) {
+                  throw new CallExecutionError(`form field is missing at index ${index}`);
+                }
+                data[key] = arg;
+              }, R.toPairs(value.parameters.body.fields ?? {}));
+
+              R.forEach(([key, index]: [string, number]) => {
+                const arg = args[index];
+                if (arg !== undefined && arg !== null) {
+                  data[key] = arg;
+                }
+              }, R.toPairs(value.parameters.body.optionalFields ?? {}));
+            } else {
+              data = args[index];
+            }
+
+            body = this.convertToJSON(data);
             break;
           }
           case BodyType.XML: {

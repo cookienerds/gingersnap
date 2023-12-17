@@ -17,6 +17,8 @@ export default (options) => ({
     service: "./src/service.ts",
     stream: "./src/stream.ts",
     synchronize: "./src/synchronize.ts",
+    mocks: "./src/mocks.ts",
+    types: "./src/types.ts",
   },
   output: [
     {

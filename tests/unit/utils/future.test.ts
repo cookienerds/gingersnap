@@ -5,7 +5,7 @@ import FutureError from "../../../src/errors/FutureError";
 
 describe("Futures", function () {
   it("should fulfill successfully", async () => {
-    const future = Future.of(5)
+    const future = Future.completed(5)
       .thenApply((v) => v.value * 5)
       .thenApply((v) => v.value ** 2)
       .thenApply(async (v) => `Result is ${v.value}`)

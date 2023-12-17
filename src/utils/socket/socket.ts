@@ -5,6 +5,7 @@ import { Future, WaitPeriod } from "../future";
 import { BufferQueue } from "../../data-structures/object";
 import { ExecutorState } from "../state";
 import { Decoder } from "../decoders/type";
+import { AbortError } from "../../error";
 
 type SocketFunctor<T extends CloseEvent | Event | MessageEvent> = (this: WebSocket, evt: T) => any;
 
@@ -21,16 +22,17 @@ interface WebSocketConfiguration {
  */
 export class StreamableWebSocket<T> {
   private readonly retryOnDisconnect: boolean;
+
   private openFuture?: Future<void>;
+
   private closeFuture?: Future<void>;
 
   private socketListeners: Array<[keyof WebSocketEventMap, SocketFunctor<any>]>;
 
-  private closeFutureCallbacks!: [() => void, (reason?: any) => void, AbortSignal];
-
   private readonly messageQueue: BufferQueue<T>;
 
   private readonly url: string;
+
   private socket?: WebSocket;
 
   private manuallyClosed: boolean;
@@ -41,6 +43,8 @@ export class StreamableWebSocket<T> {
 
   private readonly exponentialFactor: number;
 
+  private signal: AbortSignal;
+
   private backoffPeriods: number;
 
   readonly decoder: Decoder<T>;
@@ -50,6 +54,7 @@ export class StreamableWebSocket<T> {
     decoder: Decoder<T>,
     { retryOnDisconnect, cacheSize, cacheExpiryPeriod, exponentialFactor, backoffPeriodMs }: WebSocketConfiguration = {}
   ) {
+    this.signal = new AbortController().signal;
     this.decoder = decoder;
     this.socketListeners = [];
     this.url = url;
@@ -76,7 +81,13 @@ export class StreamableWebSocket<T> {
   open() {
     if (!this.openFuture || this.openFuture?.failed) {
       this.closeFuture = new Future<void>((resolve, reject, signal) => {
-        this.closeFutureCallbacks = [resolve, reject, signal];
+        this.signal.addEventListener('abort', () => {
+          resolve();
+        });
+        signal.onabort = () => {
+          this.signal.removeEventListener('abort', resolve as any);
+          reject(new AbortError());
+        }
       }).schedule();
       this.openFuture = new Future<void>((resolve, reject, signal) => {
         signal.onabort = () => {
@@ -118,7 +129,7 @@ export class StreamableWebSocket<T> {
               .catch(reject);
           } else {
             retrying = false;
-            this.closeFutureCallbacks[0]();
+            this.signal.dispatchEvent(new CustomEvent("abort"));
             cancelQueue();
             reject(new NetworkError(HTTPStatus.EXPECTATION_FAILED));
           }
@@ -157,6 +168,7 @@ export class StreamableWebSocket<T> {
     this.manuallyClosed = true;
     this.getSocket()?.close();
     this.messageQueue.clear();
+    this.signal.dispatchEvent(new CustomEvent('abort'));
   }
 
   /**
@@ -171,20 +183,7 @@ export class StreamableWebSocket<T> {
    * Gets the stream for messages received via this socket
    */
   stream(ignoreCache = false): Stream<T> {
-    const messageStream = this.messageQueue.streamEntries(ignoreCache)[Symbol.asyncIterator]();
-    return new Stream<T>(async (signal) => {
-      if (!this.closed) {
-        const value = await Promise.race([
-          Future.of(
-            messageStream.next().then((v) => v.value),
-            signal
-          ).thenApply((v) => v.value),
-          this.closedFuture(),
-        ]);
-        if (value) return value;
-      }
-      return new ExecutorState(true);
-    });
+    return this.messageQueue.streamEntries(ignoreCache).cancelOnSignal(this.signal);
   }
 
   private addEventListener<T extends CloseEvent | Event | MessageEvent>(

@@ -56,7 +56,10 @@ interface StringBodyProps extends BodyProps<BodyType.STRING> {
 
 interface JSONBodyProps extends BodyProps<BodyType.JSON> {
   parameterIndex: number;
+  fields?: { [string: string]: number };
+  optionalFields?: { [string: string]: number };
 }
+
 
 interface XMLBodyProps extends BodyProps<BodyType.XML> {
   parameterIndex: number;

@@ -1,7 +1,15 @@
 import * as R from "ramda";
-import { FieldProps, IgnoreProps, Model, ModelInternalProps, namespacedModelInternalProps } from "./model";
+import { FieldProps, IgnoreProps, Model, ModelInternalProps, namespacedModelInternalProps, Optional } from "./model";
 import InvalidValue from "../../errors/InvalidValue";
 import { DataType } from "./types";
+import { InvalidType } from "../../errors/InvalidType";
+
+const unwrapOptional = (v: any) => {
+  if (v instanceof Optional) {
+    return v.get();
+  }
+  return v;
+}
 
 /**
  * Creates a decorator that updates a field
@@ -38,6 +46,15 @@ const createValidator = (functor: (v: any) => boolean, error: Error, updater?: (
         return this[symbol];
       },
       set: function (v: any) {
+        if (v instanceof Optional) {
+          if (v.isPresent()) {
+            v = v.get();
+          } else {
+            this[symbol] = v;
+            return;
+          }
+        }
+
         if (!functor(v)) throw error;
         this[symbol] = v;
       },
@@ -49,14 +66,26 @@ const createValidator = (functor: (v: any) => boolean, error: Error, updater?: (
  * A property that exist in the incoming data
  * @param name Name of the property in the incoming data. If not provided, the variable name will be assumed as the
  * property name
+ * @param type type of the field. Not required (useful when the field is an Optional)
  * @constructor
  */
-export const Field = (name?: string) => (target: any, key: string) => {
+export const Field = (name?: string, type: any = undefined) => (target: any, key: string) => {
+  const schema: any = {};
   const props: ModelInternalProps = namespacedModelInternalProps.get(target.constructor.name) ?? {
     fields: new Map(),
   };
-  const type = Reflect.getMetadata("design:type", target, key);
-  const schema: any = {};
+  const dtype = Reflect.getMetadata("design:type", target, key);
+  const fieldProp = props.fields.get(key) ?? ({} as unknown as FieldProps);
+
+  if (type && dtype === Optional) {
+    schema.options = {useOptionalObj: true};
+    fieldProp.ignore = {...(fieldProp.ignore ?? {}), deserialize: true}
+  } else if (!type){
+    type = dtype;
+  } else if (!(dtype instanceof type)) {
+    throw new InvalidType(`Type mismatch for property ${key}`)
+  }
+
   if (type instanceof Number) {
     schema.dataType = DataType.DOUBLE;
   } else if (type instanceof String) {
@@ -65,10 +94,9 @@ export const Field = (name?: string) => (target: any, key: string) => {
     schema.dataType = DataType.BOOLEAN;
   } else if (type instanceof Model) {
     schema.dataType = DataType.RECORD;
-    schema.options = { recordClass: type };
+    schema.options = { ...(schema.options ?? {}), recordClass: type };
   }
 
-  const fieldProp = props.fields.get(key) ?? ({} as unknown as FieldProps);
   fieldProp.name = name ?? key;
   fieldProp.Type = type;
   fieldProp.isArray = false;
@@ -97,6 +125,10 @@ export const ArrayField = (type: any, name?: string) => (target: any, key: strin
     fields: new Map(),
   };
   const schema: any = { dataType: DataType.ARRAY };
+  const dtype = Reflect.getMetadata("design:type", target, key);
+  const optional = dtype === Optional;
+  schema.options = { useOptionalObj: optional, optional };
+
   if (type instanceof Number) {
     schema.itemType = DataType.DOUBLE;
   } else if (type instanceof String) {
@@ -104,7 +136,7 @@ export const ArrayField = (type: any, name?: string) => (target: any, key: strin
   } else if (type instanceof Boolean) {
     schema.itemType = DataType.BOOLEAN;
   } else if (type instanceof Model) {
-    schema.options = { recordClass: type };
+    schema.options.recordClass = type;
   }
 
   const fieldProp = props.fields.get(key) ?? ({} as unknown as FieldProps);
@@ -137,6 +169,9 @@ export const MapField = (keyType: any, valueType: any, name?: string) => (target
     fields: new Map(),
   };
   const schema: any = { dataType: DataType.MAP };
+  const dtype = Reflect.getMetadata("design:type", target, key);
+  const optional = dtype === Optional;
+  schema.options = { useOptionalObj: optional, optional };
 
   const fieldProp = props.fields.get(key) ?? ({} as unknown as FieldProps);
   fieldProp.name = key;

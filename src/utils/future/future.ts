@@ -65,17 +65,12 @@ export class Future<T> {
 
   /**
    * Creates a future from the value provided
-   * - If the value is an Executor function (callback for the new Future constructor), then a future is created
-   * - Any other value will yield Future.completed(value). Please see 'Future.completed' docs for explanation
-   * @param value
+   * @param value an Executor function (callback for the new Future constructor)
    * @param signal Abort Signal to establish the future with. If not provided, the future will only have the default
    * signals
    */
-  public static of<K>(value: K | Executor<K>, signal?: AbortSignal): Future<K> {
-    if (value instanceof Function) {
-      return new Future(value, signal);
-    }
-    return Future.completed(value);
+  public static of<K>(value: Executor<K>, signal?: AbortSignal) {
+    return new Future(value, signal);
   }
 
   /**
@@ -343,7 +338,7 @@ export class Future<T> {
    * @param callback
    * @param clone whether the future should be cloned or not.Defaults to true
    */
-  thenApply<K>(callback: (value: FutureResult<T>) => K, clone = true): Future<InferredFutureResult<K>> {
+  thenApply<K>(callback: (value: FutureResult<T>) => K, clone = false): Future<InferredFutureResult<K>> {
     const newFuture = (clone ? this.clone() : this) as Future<InferredFutureResult<K>>;
     newFuture.processors.enqueue({ success: callback as any });
     return newFuture;
@@ -354,7 +349,7 @@ export class Future<T> {
    * @param callback
    * @param clone whether the future should be cloned or not.Defaults to true
    */
-  finally(callback: (value: Future<T>) => void, clone = true): Future<T> {
+  finally(callback: (value: Future<T>) => void, clone = false): Future<T> {
     const newFuture = clone ? this.clone() : this;
     newFuture.finallyHandlers.enqueue(callback);
     return newFuture;
@@ -365,7 +360,7 @@ export class Future<T> {
    * @param callback
    * @param clone whether the future should be cloned or not.Defaults to true
    */
-  catch<K>(callback: (reason: Error) => K, clone = true): Future<InferredFutureResult<T | K>> {
+  catch<K>(callback: (reason: Error) => K, clone = false): Future<InferredFutureResult<T | K>> {
     const newFuture = (clone ? this.clone() : this) as Future<InferredFutureResult<K>>;
     newFuture.processors.enqueue({ failure: callback });
     return newFuture as unknown as Future<InferredFutureResult<T | K>>;
@@ -509,13 +504,23 @@ export class Future<T> {
             "abort",
             () => {
               abort();
-              if (!rejected) timeouts.push(setTimeout(() => reject(new FutureCancelled()), 1000));
+              if (!rejected) {
+                timeouts.push(setTimeout(() => reject(new FutureCancelled()), 1000))
+              };
             },
             { once: true }
           );
         });
 
-        this.executor(resolver, rejecter, this.defaultSignal);
+        const result = this.executor(resolver, rejecter, this.defaultSignal);
+        if (result instanceof Promise) {
+          result.then(() => {
+            if (!this.fulfilled) {
+              this.fulfilled = true;
+              resolve(null as any);
+            }
+          }).catch(rejecter);
+        }
       })
     )
       .then((v) => {

@@ -64,7 +64,7 @@ export class Lock implements ContextManager<Lock> {
       });
     }
 
-    return Future.of<Lock>(this.reEntrantLock());
+    return Future.completed<Lock>(this.reEntrantLock());
   }
 
   public release() {

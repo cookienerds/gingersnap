@@ -10,6 +10,7 @@ import {
   UpperBound,
   Range,
   RaiseError,
+  Optional
 } from "../../../src/annotations/model";
 
 const MOCKED_USER = {
@@ -52,10 +53,9 @@ class ValidObject extends Model {
   @Field("end")
   end?: number;
 
-  @Ignore()
   @Range(1, 100, true)
-  @Field()
-  floatPoint?: number;
+  @Field("floatPoint", Number)
+  floatPoint!: Optional<number>;
 
   @Ignore()
   @RaiseError
@@ -135,6 +135,12 @@ describe("Models", () => {
         start: 10,
       })
     ).toBeTruthy();
+    expect(
+      ValidObject.fromJSON({
+        version: "release-1.2",
+        start: 10,
+      }).floatPoint.isPresent()
+    ).toBeFalsy();
     expect(() =>
       ValidObject.fromJSON({
         version: "release-alpha-1.2.0",

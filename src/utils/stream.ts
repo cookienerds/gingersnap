@@ -46,7 +46,7 @@ export class Stream<T> implements AsyncGenerator<T> {
    * AbortController used to cancel http request created by the callback
    * @private
    */
-  private readonly controller: AbortController;
+  private controller: AbortController;
 
   /**
    * Callback function that executes a network request. Function should accept an AbortSignal as argument,
@@ -199,6 +199,15 @@ export class Stream<T> implements AsyncGenerator<T> {
   }
 
   /**
+   * Cancel the stream on the given signal
+   * @param signal
+   */
+  cancelOnSignal(signal: AbortSignal) {
+    signal.addEventListener('abort', () => this.cancel());
+    return this;
+  }
+
+  /**
    * Gets a future of the next value on the stream, if any.
    */
   get future(): Future<T> {
@@ -223,9 +232,8 @@ export class Stream<T> implements AsyncGenerator<T> {
    * @param callback
    */
   map<K>(callback: (v: T) => K | Promise<K> | Future<K> | Stream<K>): Stream<InferStreamResult<K>> {
-    const newStream = this.clone();
-    newStream.actions.push({ type: ActionType.TRANSFORM, functor: callback as ActionFunctor<T> });
-    return newStream as unknown as Stream<InferStreamResult<K>>;
+    this.actions.push({ type: ActionType.TRANSFORM, functor: callback as ActionFunctor<T> });
+    return this as unknown as Stream<InferStreamResult<K>>;
   }
 
   /**
@@ -233,8 +241,7 @@ export class Stream<T> implements AsyncGenerator<T> {
    * @param callback
    */
   filter(callback: (v: T) => boolean | Promise<boolean>): Stream<T> {
-    const newStream = this.clone();
-    newStream.actions.push({
+    this.actions.push({
       type: ActionType.FILTER,
       functor: async (v) => {
         if (v instanceof FutureResult) v = v.value;
@@ -244,7 +251,7 @@ export class Stream<T> implements AsyncGenerator<T> {
         return null as T;
       },
     });
-    return newStream;
+    return this;
   }
 
   /**
@@ -255,12 +262,11 @@ export class Stream<T> implements AsyncGenerator<T> {
    * for the split criteria should be added to the chunk, if false then the data will be added to the next chunk
    */
   chunk(value: number | ((v: T) => boolean), keepSplitCriteria: boolean = false): Stream<T[]> {
-    const newStream = this.clone();
     if (typeof value === "number" && value < 1) throw new Error("Invalid chunk size");
     let chunkedResults: T[] = [];
 
     if (typeof value === "number") {
-      newStream.actions.push({
+      this.actions.push({
         type: ActionType.PACK,
         functor: (v) => {
           chunkedResults.push(v);
@@ -273,7 +279,7 @@ export class Stream<T> implements AsyncGenerator<T> {
         },
       });
     } else {
-      newStream.actions.push({
+      this.actions.push({
         type: ActionType.TRANSFORM,
         functor: (v) => {
           if (value(v)) {
@@ -287,18 +293,24 @@ export class Stream<T> implements AsyncGenerator<T> {
         },
       });
     }
-    return newStream as unknown as Stream<T[]>;
+    return this as unknown as Stream<T[]>;
   }
 
   /**
    * Clones the stream
+   * @param withSignals should the abort signals of the original stream trigger the cloned stream cancellation
    */
-  clone(): Stream<T> {
+  clone(withSignals?: boolean): Stream<T> {
+
     const newStream = new Stream<T>(this.executor);
     newStream.actions = [...this.actions];
     newStream.executed = this.executed;
     newStream.done = this.done;
     newStream.backlog = [...this.backlog];
+    if (withSignals) {
+      newStream.controller = this.controller;
+    }
+
     return newStream;
   }
 
@@ -315,10 +327,9 @@ export class Stream<T> implements AsyncGenerator<T> {
    * @param count
    */
   take(count: number) {
-    const newStream = this.clone();
     let index = 0;
 
-    newStream.actions.push({
+    this.actions.push({
       type: ActionType.LIMIT,
       functor: (value) => {
         index++;
@@ -327,7 +338,7 @@ export class Stream<T> implements AsyncGenerator<T> {
         return { value, done: false };
       },
     });
-    return newStream;
+    return this;
   }
 
   /**
@@ -342,10 +353,9 @@ export class Stream<T> implements AsyncGenerator<T> {
    * @param count
    */
   skip(count: number) {
-    const newStream = this.clone();
     let index = 1;
 
-    newStream.actions.push({
+    this.actions.push({
       type: ActionType.FILTER,
       functor: (value) => {
         if (index && index++ <= count) return null;
@@ -353,7 +363,7 @@ export class Stream<T> implements AsyncGenerator<T> {
         return value;
       },
     });
-    return newStream;
+    return this;
   }
 
   /**
@@ -361,10 +371,9 @@ export class Stream<T> implements AsyncGenerator<T> {
    * @param period
    */
   throttleBy(period: WaitPeriod) {
-    const newStream = this.clone();
     let future: Future<undefined> | undefined;
 
-    newStream.actions.push({
+    this.actions.push({
       type: ActionType.TRANSFORM,
       functor: (value) => {
         if (!future) {
@@ -376,23 +385,21 @@ export class Stream<T> implements AsyncGenerator<T> {
         return null;
       },
     });
-    return newStream;
+    return this;
   }
 
   /**
    * Flattens any nested structure from the data arriving on the stream
    */
   flatten() {
-    const newStream = this.clone();
-
-    newStream.actions.push({
+    this.actions.push({
       type: ActionType.UNPACK,
       functor: (value) => {
         if (value instanceof Array || value instanceof Set) return R.flatten(value as any[]) as any;
         return [value] as any;
       },
     });
-    return newStream as unknown as Stream<Flattened<T>>;
+    return this as unknown as Stream<Flattened<T>>;
   }
 
   /**
@@ -401,13 +408,11 @@ export class Stream<T> implements AsyncGenerator<T> {
    * @param callback
    */
   catch<K>(callback: (v: Error) => K | null | undefined): Stream<InferErrorResult<K, T> | T> {
-    const newStream = this.clone();
-
-    newStream.actions.push({
+    this.actions.push({
       type: ActionType.CATCH,
       functor: callback as ActionFunctor<any>,
     });
-    return newStream as unknown as Stream<InferErrorResult<K, T> | T>;
+    return this as unknown as Stream<InferErrorResult<K, T> | T>;
   }
 
   /**
@@ -483,6 +488,9 @@ export class Stream<T> implements AsyncGenerator<T> {
         if (state === State.DONE) {
           this.done = true;
           if (value !== undefined) return { done: false, value };
+        }
+        if (this.controller.signal.aborted) {
+          this.done = true;
         }
       }
       return { done: true, value: undefined };

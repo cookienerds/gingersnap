@@ -22,7 +22,9 @@ describe("Browser WebSocket", function () {
     let connected = false;
     let closed = false;
     server.on("connection", () => (connected = true));
-    server.on("close", () => (closed = true));
+    server.on("close", () => {
+      (closed = true)
+    });
 
     const socket = new StreamableWebSocket(url, blobDecoder, { retryOnDisconnect: false });
     await Promise.race([socket.open(), Future.sleep({ seconds: 1 })]).then(() => {
@@ -30,9 +32,10 @@ describe("Browser WebSocket", function () {
     });
 
     socket.close();
-    await Promise.race([socket.closedFuture(), Future.sleep({ seconds: 1 })]).then(() => {
-      expect(closed).toBeTruthy();
-    });
+    await Future.waitFor(socket.closedFuture(), 1);
+    await Future.sleep(1);
+    expect(socket.closed).toBeTruthy();
+    expect(closed).toBeTruthy();
   });
 
   it("should send messages", async () => {

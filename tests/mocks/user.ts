@@ -16,6 +16,7 @@ import {
   Throttle,
   ThrottleBy,
   XMLResponse,
+  Field as SField
 } from "../../src/annotations/service";
 import { ArrayField, Field, Ignore, MapField, Model } from "../../src/annotations/model";
 import "reflect-metadata";
@@ -99,6 +100,12 @@ export class UserService extends Service {
   @JSONResponse({ modelType: User })
   @POST("users")
   public createUser(@JSONBody user: User): Call<User> {
+    return PASS;
+  }
+
+  @JSONResponse({ modelType: User })
+  @POST("users/2")
+  public createUser2(@SField("username") username: string): Call<User> {
     return PASS;
   }
 

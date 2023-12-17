@@ -183,12 +183,12 @@ export const AuthRefresher =
 export const Part = createRequestMultiBodyParameterDecorator("parts");
 
 /**
- * Marks argument as a property in the FormUrlEncoded  form
+ * Marks argument as a property in the FormUrlEncoded  form or a JSON payload
  */
 export const Field = createRequestMultiBodyParameterDecorator("fields");
 
 /**
- * Marks argument as a property in the FormUrlEncoded  form, but it can be missing
+ * Marks argument as a property in the FormUrlEncoded  form or JSON payload, but it can be missing
  */
 export const OptionalField = createRequestMultiBodyParameterDecorator("OptionalFields");
 

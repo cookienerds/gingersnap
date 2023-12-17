@@ -15,6 +15,7 @@
     "declarationDir": "lib",
     "lib": [
       "dom",
+      "dom.iterable",
       "esnext"
     ],
     "allowSyntheticDefaultImports": true,

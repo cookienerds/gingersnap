@@ -46,6 +46,27 @@ export class TimeableObject<T, K> extends CyclicalObject<T, K> {
     }
   }
 
+  get(key: T, defaultValue: K | undefined = undefined): K | undefined {
+    const result = super.get(key, defaultValue);
+
+    if (result !== undefined) {
+      if (this.expiryPeriod) {
+        const hashedKey = this.computeHash(key);
+        const timer = this.timers.get(hashedKey);
+        timer?.cancel();
+
+        this.timers.set(
+          hashedKey,
+          Future.sleep(this.expiryPeriod ?? 0)
+            .thenApply(() => this.delete(key))
+            .schedule()
+        );
+      }
+    }
+
+    return result;
+  }
+
   delete(key: T) {
     const hashedKey = this.computeHash(key);
     const timer = this.timers.get(hashedKey);

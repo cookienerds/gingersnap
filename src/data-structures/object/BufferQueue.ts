@@ -1,6 +1,6 @@
 import { WatchableObject } from "./WatchableObject";
 import { TimeableObject } from "./TimeableObject";
-import { Future, Stream, WaitPeriod } from "../../utils";
+import { ExecutorState, Future, Stream, WaitPeriod } from "../../utils";
 import * as R from "ramda";
 
 /**
@@ -27,7 +27,7 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
         return value as T;
       }
       return Future.of<T>((resolve, reject, signal) => {
-        signal.onabort = this.on(
+        const unsubscribe = this.on(
           pointer,
           (v: any) => {
             pointer++;
@@ -35,6 +35,10 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
           },
           false
         );
+        signal.onabort = () => {
+          unsubscribe();
+          resolve(new ExecutorState(true) as any);
+        };
       }, signal);
     }) as any);
   }
