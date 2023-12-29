@@ -13,4 +13,5 @@ export {
   LowerBound,
   UpperBound,
   Range,
+  Optional,
 } from "./annotations/model";
