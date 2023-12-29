@@ -18,7 +18,6 @@ export const ReadStream =
         ...(v ?? {}),
         keyPath,
         value,
-        model: Reflect.getMetadata("design:paramtypes", target, propertyKey)[0],
         array: false,
       }),
       proto.__internal__
