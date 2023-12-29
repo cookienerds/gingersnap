@@ -87,7 +87,10 @@ export class WebSocketService extends Service {
           if (body === undefined || body === null)
             throw new CallExecutionError("Empty body detected for a write stream");
           return new Stream(async (signal) => {
-            await this.socket.open();
+            if (!this.socket.opened) {
+              await this.socket.open();
+            }
+
             if (body instanceof Model) {
               this.socket.send(body.blob());
             } else if (body instanceof ArrayBuffer || body instanceof Blob) {
@@ -124,7 +127,9 @@ export class WebSocketService extends Service {
       };
     }, socketMethods);
 
-    this.socket.open();
+    if (!this.socket.opened) {
+      void this.socket.open();
+    }
 
     const originalMethodConfig = internals.methodConfig;
     internals.methodConfig = R.fromPairs(
