@@ -88,6 +88,6 @@ export class TimeableObject<T, K> extends CyclicalObject<T, K> {
   }
 
   protected computeHash(key: T) {
-    return hash.sha1(String(key));
+    return typeof key === "string" ? key : hash.sha1(String(key));
   }
 }
