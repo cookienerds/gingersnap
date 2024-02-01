@@ -7,11 +7,18 @@ import { SimpleQueue } from "../../data-structures/object/SimpleQueue";
 import { v4 as uuid } from "uuid";
 import { FutureResult, InferredFutureResult } from "./result";
 import { Stream } from "../stream";
+import { AbortError } from "../../error";
 
 type Resolve<T> = (value: T | PromiseLike<T>) => any;
 type Reject = (reason?: Error) => void;
 type Executor<T> = (resolve: Resolve<T>, reject: Reject, signal: AbortSignal) => void | Promise<void>;
 type FutureReturnType<T> = T extends Future<infer U> ? U : T;
+
+const calculatePeriodValue = (period: WaitPeriod) =>
+  (period.hours ?? 0) * 60 * 60 * 1000 +
+  (period.minutes ?? 0) * 60 * 1000 +
+  (period.seconds ?? 0) * 1000 +
+  (period.milliseconds ?? 0);
 
 /**
  * Duration to wait for something to occur
@@ -122,13 +129,7 @@ export class Future<T> {
    */
   public static sleep(period: WaitPeriod | number, signal?: AbortSignal) {
     return new Future<void>((resolve, reject, futureSignal) => {
-      const totalTime =
-        typeof period === "number"
-          ? period * 1000
-          : (period.hours ?? 0) * 60 * 60 * 1000 +
-            (period.minutes ?? 0) * 60 * 1000 +
-            (period.seconds ?? 0) * 1000 +
-            (period.milliseconds ?? 0);
+      const totalTime = typeof period === "number" ? period * 1000 : calculatePeriodValue(period);
       const timer = setTimeout(resolve, totalTime);
       futureSignal.addEventListener(
         "abort",
@@ -223,6 +224,33 @@ export class Future<T> {
             future.unregisterSignal(signal);
           });
         });
+    });
+  }
+
+  /**
+   * Creates a future that schedules the provided functor at the given frequency intervals
+   * @param functor function to be executed at specified intervals
+   * @param frequency interval used to schedule the functor's call
+   */
+  public static periodic(functor: (signal: AbortSignal) => Promise<any> | Future<any> | any, frequency: WaitPeriod) {
+    return Future.of((resolve, reject, signal) => {
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises
+      const cancel = setInterval(async () => {
+        const result = functor(signal);
+
+        if (result instanceof Promise || result instanceof Future) {
+          await result;
+        }
+      }, calculatePeriodValue(frequency));
+
+      signal.addEventListener(
+        "abort",
+        () => {
+          clearInterval(cancel);
+          resolve(undefined);
+        },
+        { once: true }
+      );
     });
   }
 
@@ -505,8 +533,8 @@ export class Future<T> {
             () => {
               abort();
               if (!rejected) {
-                timeouts.push(setTimeout(() => reject(new FutureCancelled()), 1000))
-              };
+                timeouts.push(setTimeout(() => reject(new FutureCancelled()), 1000));
+              }
             },
             { once: true }
           );
@@ -514,12 +542,14 @@ export class Future<T> {
 
         const result = this.executor(resolver, rejecter, this.defaultSignal);
         if (result instanceof Promise) {
-          result.then(() => {
-            if (!this.fulfilled) {
-              this.fulfilled = true;
-              resolve(null as any);
-            }
-          }).catch(rejecter);
+          result
+            .then(() => {
+              if (!this.fulfilled) {
+                this.fulfilled = true;
+                resolve(null as any);
+              }
+            })
+            .catch(rejecter);
         }
       })
     )

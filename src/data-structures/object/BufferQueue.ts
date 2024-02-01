@@ -26,7 +26,7 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
         pointer++;
         return value as T;
       }
-      return Future.of<T>((resolve, reject, signal) => {
+      return new Promise((resolve) => {
         const unsubscribe = this.on(
           pointer,
           (v: any) => {
@@ -39,7 +39,7 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
           unsubscribe();
           resolve(new ExecutorState(true) as any);
         };
-      }, signal);
+      });
     }) as any);
   }
 

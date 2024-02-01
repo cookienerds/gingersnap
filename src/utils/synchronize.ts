@@ -1,24 +1,25 @@
 import { Future, FutureResult, WaitPeriod } from "./future";
-import { WaitableObject } from "../data-structures/object";
 import { ContextManager } from "./context";
 
 export class FutureEvent {
-  private readonly __internal__: WaitableObject<any, any>;
+  private readonly __internal__: EventTarget;
+  private ready: boolean;
 
   constructor() {
-    this.__internal__ = new WaitableObject();
+    this.__internal__ = new EventTarget();
+    this.ready = false;
   }
 
   get isSet() {
-    return this.__internal__.get("set") === true;
+    return this.ready;
   }
 
   public wait(period?: WaitPeriod) {
     const future = Future.of<FutureEvent>((resolve, reject, signal) => {
       if (!this.isSet) {
-        signal.onabort = this.__internal__.on("set", (v) => {
-          if (v === true) resolve(this);
-        });
+        const readyCallback = () => resolve(this);
+        signal.onabort = () => this.__internal__.removeEventListener('ready', readyCallback);
+        this.__internal__.addEventListener('ready', readyCallback, {once: true});
       } else {
         resolve(this);
       }
@@ -29,11 +30,12 @@ export class FutureEvent {
   }
 
   public set() {
-    this.__internal__.set("set", true);
+    this.ready = true;
+    this.__internal__.dispatchEvent(new Event('ready'));
   }
 
   public clear() {
-    this.__internal__.set("set", false);
+    this.ready = false;
   }
 }
 
