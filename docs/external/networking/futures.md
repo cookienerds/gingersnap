@@ -85,8 +85,7 @@ console.log(`If it failed, the error is `, future.error);
 console.log(`If it completed, the result is `, future.result);
 ```
 
-## Additional Features of Future
-### Chaining Futures
+## Chaining Futures
 Futures can be chained using the **thenApply** method. The callback is then provided with a **FutureResult**
 object that contains the **value** of the executed future, and the **signal** to handle any cancel event. thenApply by
 default modifies the existing future (for faster performance, no object cloning like what is done in Promises), but can
@@ -120,7 +119,7 @@ import { Future } from "@cookienerds/gingersnap/future";
 })()
 ```
 
-### Catching Errors and Finally Block
+## Catching Errors and Finally Block
 You can catch errors using the **catch** method, similar to Promises.catch as well as adding finally block
 ```ts
 import { Future } from "@cookienerds/gingersnap/future";
@@ -148,7 +147,7 @@ import { Future } from "@cookienerds/gingersnap/future";
 })();
 ```
 
-### Registering external signals
+## Registering external signals
 You can add external signals to a future which allows the future to be cancelled from more than one source.
 ```ts
 import { Future } from "@cookienerds/gingersnap/future";
@@ -182,7 +181,7 @@ awaitFuture(controller.signal);  // [!code focus]
 controller.abort(); // cancelling future from an external signal  // [!code focus]
 ```
 
-### Sleeping
+## Sleeping
 Futures make's it easier to handle sleeping operations. You can always cancel the sleep using the **cancel** method.
 
 ```ts
@@ -205,7 +204,7 @@ const future = Future.sleep({seconds: 5})
 future.run();
 ```
 
-### Waiting before cancellation
+## Waiting before cancellation
 Waiting on a long-running task forever might be an issue for your application, and therefore you may want to cancel 
 the operation if it takes too long. Using **Future.waitFor** you can wait for a future to complete within a specified
 WaitPeriod, and if it doesn't complete before that time, you cancel the future. **Future.waitFor** also returns a new
@@ -237,7 +236,7 @@ const userIdFuture = Future.of((resolve, reject, signal) => {
 })()
 ```
 
-### Scheduling without waiting
+## Scheduling without waiting
 
 You can schedule a future to execute in background, without having to await the future
 ```ts
@@ -256,7 +255,7 @@ const userIdFuture = Future.of((resolve, reject, signal) => {
 const future = userIdFuture.schedule();
 ```
 
-### Creating a completed future
+## Creating a completed future
 
 You can create a completed future similar to Promise.resolve.
 ```ts
@@ -269,7 +268,7 @@ const future = Future.completed(5).thenApply(result => {
 future.schedule();
 ```
 
-### Creating a failed future
+## Creating a failed future
 
 You can create a failed future similar to Promise.reject.
 ```ts
@@ -281,7 +280,7 @@ future.schedule();
 console.log(`Future failed? ${future.failed ? 'Yes': 'No'}`);
 ```
 
-### Converting to Future
+## Converting to Future
 
 You can convert Promises to a future using the **Future.wrap** method
 ```ts
@@ -296,7 +295,7 @@ future.schedule();
 ```
 
 
-### Checking for the first completed future
+## Checking for the first completed future
 ```ts
 import { Future } from "@cookienerds/gingersnap/future";
 
@@ -311,7 +310,7 @@ Future.firstCompleted([future1, future2])
 .run();
 ```
 
-### Checking for all results
+## Checking for all results
 Futures can be collected as an array, yielding an array of the result of each future
 ```ts
 import { Future } from "@cookienerds/gingersnap/future";
@@ -327,7 +326,7 @@ Future.collect([future1, future2])
 .run();
 ```
 
-### Resolving when all futures are settled
+## Resolving when all futures are settled
 
 Once all futures are settled, the array of futures is returned. Each future can then be checked to see
 if it completed successfully or failed
