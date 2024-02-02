@@ -10,7 +10,8 @@ export {
   ParamHeaders,
   MapOfHeaders,
 } from "./annotations/service/types";
-export { WebSocketService, Service as NetworkService } from "./annotations/service";
+export { Service as NetworkService } from "./annotations/service/service";
+export { WebSocketService } from "./annotations/service/socket";
 export {
   ReadStream,
   MatcherKey,

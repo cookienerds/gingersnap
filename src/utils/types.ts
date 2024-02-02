@@ -43,7 +43,9 @@ export type InferStreamResult<T> = T extends Stream<infer U>
   ? InferStreamResult<U>
   : T extends Future<infer U>
   ? InferredFutureResult<U>
-  : T extends ExecutorState<infer U> ? U: T;
+  : T extends ExecutorState<infer U>
+  ? U
+  : T;
 
 export type FlagExcludedType<Base, Type> = { [Key in keyof Base]: Base[Key] extends Type ? never : Key };
 export type AllowedNames<Base, Type> = FlagExcludedType<Base, Type>[keyof Base];

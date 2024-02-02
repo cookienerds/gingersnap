@@ -3,7 +3,7 @@ export default {
   testEnvironment: "jsdom",
   coverageReporters: ["html", "text", "text-summary", "cobertura"],
   transform: {
-    "^.+\\.[tj]s$": "ts-jest",
+    "^.+\\.[tj]s$": ["ts-jest", { tsconfig: "./tsconfig.jest.json" }],
   },
   moduleNameMapper: {
     cborg: "<rootDir>/node_modules/cborg/cjs/cborg.js",

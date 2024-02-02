@@ -1,7 +1,7 @@
 import WS from "jest-websocket-mock";
 import { StreamableWebSocket } from "../../../src/utils/socket";
 import NetworkError from "../../../src/errors/NetworkError";
-import { HTTPStatus } from "../../../src/annotations/service";
+import { HTTPStatus } from "../../../src/annotations/service/network";
 import { Future } from "../../../src/utils";
 
 describe("Browser WebSocket", function () {

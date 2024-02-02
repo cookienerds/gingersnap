@@ -8,12 +8,12 @@ import {
   OptionalField,
   PASS,
   POST,
-  Service,
-} from "../../src/annotations/service";
+  NetworkService,
+} from "../../src/service";
 import { BearerCredentials } from "../../src/annotations/model/credentials";
 import { Call } from "../../src/utils";
 
-export class AuthService extends Service {
+export class AuthService extends NetworkService {
   @POST("api/v1/auth/login")
   @FormUrlEncoded
   @JSONResponse({ modelType: BearerCredentials })

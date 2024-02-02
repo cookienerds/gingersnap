@@ -1,5 +1,5 @@
 import { Model } from "./model";
-import { MapOfHeaders } from "../service";
+import { MapOfHeaders } from "../service/types";
 import { Alias, Field, Ignore } from "./property";
 import { isNode } from "browser-or-node";
 

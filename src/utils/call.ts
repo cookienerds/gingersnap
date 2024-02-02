@@ -1,4 +1,4 @@
-import { NONE, ResponseType, ThrottleByProps } from "../annotations/service";
+import { NONE, ResponseType, ThrottleByProps } from "../annotations/service/types";
 import CallExecutionError from "../errors/CallExecutionError";
 import MissingArgumentsError from "../errors/MissingArgumentsError";
 import { DataFormat, Model } from "../annotations/model";
