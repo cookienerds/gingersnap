@@ -2,10 +2,10 @@ import NetworkError from "../../errors/NetworkError";
 import { HTTPStatus } from "../../annotations/service/network";
 import { Stream } from "../stream";
 import { Future, WaitPeriod } from "../future";
-import { BufferQueue } from "../../data-structures/object";
 import { Decoder } from "../decoders/type";
 import { AbortError, FutureCancelled } from "../../error";
 import { FutureEvent, Lock } from "../synchronize";
+import { ExecutorState } from "../state";
 
 type SocketFunctor<T extends CloseEvent | Event | MessageEvent> = (this: WebSocket, evt: T) => any;
 
