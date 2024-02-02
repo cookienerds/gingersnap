@@ -1,5 +1,6 @@
 import { exact, MockNetworkService, request, response } from "../../src/mocks";
-import { HTTPStatus, RequestType } from "../../src/annotations/service";
+import { HTTPStatus } from "../../src/annotations/service/network";
+import { RequestType } from "../../src/annotations/service/types";
 
 
 describe('MockWebService', () => {

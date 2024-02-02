@@ -1,6 +1,6 @@
-import { PASS, WebSocketService, WriteStream, ReadStream, JSONResponse } from "../../src/annotations/service";
 import { Stream } from "../../src/utils/stream";
 import { Model, Field } from "../../src/annotations/model";
+import { WebSocketService, WriteStream, PASS, JSONResponse, ReadStream } from "../../src/service";
 
 export class Address extends Model {
   @Field() address!: string;

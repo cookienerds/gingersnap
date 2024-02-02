@@ -1,7 +1,7 @@
 import {
   GET,
   POST,
-  Service,
+  NetworkService,
   Authenticator,
   AuthRefresher,
   BaseUrl,
@@ -18,13 +18,13 @@ import {
   XMLBody,
   NONE,
   PASS,
-} from "../../src/annotations/service";
+} from "../../src/service";
 import { User } from "./user";
 import { BasicCredentials } from "../../src/annotations/model/credentials";
 import { Call } from "../../src/utils";
 
 @BaseUrl("https://test.com")
-export class UtilService extends Service {
+export class UtilService extends NetworkService {
   @Authenticator(BasicCredentials)
   public loginAnonymously(): BasicCredentials {
     return new BasicCredentials("unknown", `random-${Math.random()}`);

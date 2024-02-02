@@ -3,7 +3,7 @@ import { User, UserService } from "./mocks/user";
 import * as R from "ramda";
 import { UtilService } from "./mocks/util";
 import { AuthService } from "./mocks/auth";
-import { THROTTLE_DEFAULT_MS } from "../src/annotations/service";
+import { THROTTLE_DEFAULT_MS } from "../src/annotations/service/network";
 import {
   createModelClassAnnotationTag,
   createModelFieldAnnotationTag,

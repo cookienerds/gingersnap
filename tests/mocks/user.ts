@@ -6,21 +6,21 @@ import {
   Headers,
   JSONBody,
   JSONResponse,
-  PASS,
   Path,
   POST,
   PUT,
   Query,
   QueryMap,
-  Service,
   Throttle,
   ThrottleBy,
   XMLResponse,
   Field as SField
-} from "../../src/annotations/service";
+} from "../../src/annotations/service/network";
 import { ArrayField, Field, Ignore, MapField, Model } from "../../src/annotations/model";
 import "reflect-metadata";
 import { Call } from "../../src/utils";
+import { PASS } from "../../src/annotations/service/types";
+import { NetworkService } from "../../src/service";
 
 export class User extends Model {
   @Field() name!: string;
@@ -70,7 +70,7 @@ export class UserProfilePage extends Model {
   @Field() profile!: UserProfile;
 }
 
-export class UserService extends Service {
+export class UserService extends NetworkService {
   @GET("users")
   @JSONResponse({ modelType: User, isArray: true })
   public getUsers(): Call<User[]> {
