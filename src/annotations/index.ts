@@ -1,4 +1,4 @@
-import { Service } from "./service";
+import { Service } from "./service/service";
 import { Decoder } from "../utils/decoders/type";
 
 export { Call, Callable } from "../utils/call";

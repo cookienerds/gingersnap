@@ -1,9 +1,8 @@
 import NetworkError from "../../errors/NetworkError";
-import { HTTPStatus } from "../../annotations/service";
+import { HTTPStatus } from "../../annotations/service/network";
 import { Stream } from "../stream";
 import { Future, WaitPeriod } from "../future";
 import { BufferQueue } from "../../data-structures/object";
-import { ExecutorState } from "../state";
 import { Decoder } from "../decoders/type";
 import { AbortError, FutureCancelled } from "../../error";
 import { FutureEvent, Lock } from "../synchronize";

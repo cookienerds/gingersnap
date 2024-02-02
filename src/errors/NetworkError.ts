@@ -1,4 +1,4 @@
-import { HTTPStatus } from "../annotations/service";
+import { HTTPStatus } from "../annotations/service/network";
 
 export default class NetworkError extends Error {
   status: HTTPStatus;

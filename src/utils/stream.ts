@@ -203,7 +203,7 @@ export class Stream<T> implements AsyncGenerator<T> {
    * @param signal
    */
   cancelOnSignal(signal: AbortSignal) {
-    signal.addEventListener('abort', () => this.cancel());
+    signal.addEventListener("abort", () => this.cancel());
     return this;
   }
 
@@ -301,7 +301,6 @@ export class Stream<T> implements AsyncGenerator<T> {
    * @param withSignals should the abort signals of the original stream trigger the cloned stream cancellation
    */
   clone(withSignals?: boolean): Stream<T> {
-
     const newStream = new Stream<T>(this.executor);
     newStream.actions = [...this.actions];
     newStream.executed = this.executed;
