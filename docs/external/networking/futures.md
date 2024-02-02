@@ -293,3 +293,53 @@ const future = Future.wrap(Promise.resolve(5)).thenApply(result => {
 
 future.schedule();
 ```
+
+
+## Checking for the first completed future
+```ts
+import { Future } from "@cookienerds/gingersnap/future";
+
+// Future from a promise
+const future1 = Future.sleep(5).thenApply(() => 5);
+const future2 = Future.sleep(2).thenApply(() => 15);
+
+
+// Received value 15
+Future.firstCompleted([future1, future2])
+.thenApply(v => console.log(`Received value ${v.value}`))
+.run();
+```
+
+## Checking for all results
+Futures can be collected as an array, yielding an array of the result of each future
+```ts
+import { Future } from "@cookienerds/gingersnap/future";
+
+// Future from a promise
+const future1 = Future.sleep(5).thenApply(() => 5);
+const future2 = Future.sleep(2).thenApply(() => 15);
+
+
+// Received value [5, 15]
+Future.collect([future1, future2])
+.thenApply(v => console.log(`Received values ${v.value}`))
+.run();
+```
+
+## Resolving when all futures are settled
+
+Once all futures are settled, the array of futures is returned. Each future can then be checked to see
+if it completed successfully or failed
+```ts
+import { Future } from "@cookienerds/gingersnap/future";
+
+// Future from a promise
+const future1 = Future.sleep(5).thenApply(() => 5);
+const future2 = Future.exceptionally(new Error('failed'));
+
+
+// Received value [future1, future2]
+Future.collectSettled([future1, future2])
+.thenApply(v => console.log(`Received futures ${v.value}`))
+.run();
+```

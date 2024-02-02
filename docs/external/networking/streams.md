@@ -4,7 +4,7 @@ A Stream represents an eventual flow of data from 1 or more asynchronous operati
 data in stages
 
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -32,7 +32,7 @@ getPostsByUser();
 ### Taking few results
 
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -60,7 +60,7 @@ getPostsByUser();
 
 ### Flatten results
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -88,7 +88,7 @@ getPostsByUser();
 
 ### Skipping results
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -116,7 +116,7 @@ getPostsByUser();
 
 ### Filtering results
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -145,7 +145,7 @@ getPostsByUser();
 
 ### Transforming results
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -173,7 +173,7 @@ getPostsByUser();
 
 ### Chunking results
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -202,7 +202,7 @@ getPostsByUser();
 
 ### throttling results
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -230,7 +230,7 @@ getPostsByUser();
 
 ### Executing once
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -258,7 +258,7 @@ getPostsByUser();
 
 ### Executing once
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -286,7 +286,7 @@ getPostsByUser();
 
 ### Executing once
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;
@@ -312,7 +312,7 @@ getPostsByUser();
 
 ### Futures to Stream
 ```ts
-import { Stream } from '@cookienerds/gingersnap/utils/stream';
+import { Stream } from '@cookienerds/gingersnap/stream';
 import { ExecutorState } from './state'
 
 let userId = 0;

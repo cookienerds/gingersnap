@@ -51,14 +51,6 @@ export default {
         ]
       },
       {
-        text: 'Data Modelling',
-        collapsed: false,
-        items: [
-          {text: 'Creating Models', link: '/data-model/model'},
-          {text: 'Data Conversion', link: '/data-model/conversion'},
-        ]
-      },
-      {
         text: 'Networking',
         collapsed: false,
         items: [
@@ -66,6 +58,14 @@ export default {
           {text: 'Streams', link: '/networking/streams'},
           {text: 'Managing HTTP Requests', link: '/networking/network-service'},
           {text: 'WebSockets', link: '/networking/websockets'},
+        ]
+      },
+      {
+        text: 'Data Modelling & Validation',
+        collapsed: false,
+        items: [
+          {text: 'Creating Models', link: '/data-model/model'},
+          {text: 'Data Conversion', link: '/data-model/conversion'},
         ]
       },
       {
