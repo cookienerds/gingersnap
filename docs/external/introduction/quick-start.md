@@ -1,6 +1,6 @@
 # Getting Started
 
-This section will help you build a basic service layer for your web application. By the end of this
+This section will quickly carry you through the main help you build a basic service layer for your web application. By the end of this
 tutorial, you will understand:
 - modelling data
 - sending and receiving messages via HTTP/S
