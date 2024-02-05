@@ -31,7 +31,7 @@ export default {
       copyright: 'Copyright © CookieNerds LLC 2020-present'
     },
     nav: [
-      { text: 'Guide', link: '/' },
+      { text: 'Guide', link: '/introduction/what-is-gingersnap' },
       { text: 'Internal Docs', link: 'https://cookienerd-frameworks.gitlab.io/gingersnap/internal/index.html' },
       {
         text: version,
@@ -43,11 +43,11 @@ export default {
     ],
     sidebar: [
       {
-        text: 'Introduction',
+        text: 'Getting Started',
         collapsed: false,
         items: [
-          {text: 'What is GingerSnap?', link: '/introduction/what-is-gingersnap'},
-          {text: 'Getting Started', link: '/introduction/getting-started'},
+          {text: 'Introduction', link: '/introduction/what-is-gingersnap'},
+          {text: 'Quick Start', link: '/introduction/quick-start'},
         ]
       },
       {
