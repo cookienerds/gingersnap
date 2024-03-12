@@ -5,6 +5,7 @@ import { AnyDataType, Flattened, InferErrorResult, InferStreamResult } from "./t
 import { Future, FutureResult, WaitPeriod } from "./future";
 import { ExecutorState } from "./state";
 import FutureError from "../errors/FutureError";
+import { TimeableObject } from "../data-structures/object";
 
 enum ActionType {
   TRANSFORM,
@@ -254,6 +255,94 @@ export class Stream<T> implements AsyncGenerator<T> {
     return this;
   }
 
+  reduce<K, V>(initialData: K, functor: (v: T, prev: K | V) => V, exhaustive: boolean = true): Stream<V> {
+    let previousData: K | V = initialData;
+
+    if (exhaustive) {
+      this.actions.push({
+        type: ActionType.PACK,
+        functor: (v) => {
+          if (v === null || v === undefined) {
+            return { done: true, value: previousData } as any;
+          }
+          previousData = functor(v, previousData);
+          return { done: false };
+        },
+      });
+    } else {
+      this.actions.push({
+        type: ActionType.TRANSFORM,
+        functor: (v: T) => {
+          previousData = functor(v, previousData);
+          return previousData as any;
+        },
+      });
+    }
+
+    return this as unknown as Stream<V>;
+  }
+
+  reduceWhile<K, V>(
+    predicate: (v: T) => boolean,
+    initialData: K,
+    functor: (v: T, prev: K | V) => V,
+    exhaustive: boolean = true
+  ): Stream<V> {
+    let previousData: K | V = initialData;
+
+    if (exhaustive) {
+      this.actions.push({
+        type: ActionType.PACK,
+        functor: (v) => {
+          if (v === null || v === undefined || predicate(v)) {
+            return { done: true, value: previousData } as any;
+          }
+          previousData = functor(v, previousData);
+          return { done: false };
+        },
+      });
+    } else {
+      this.actions.push({
+        type: ActionType.LIMIT,
+        functor: (v: T) => {
+          if (predicate(v)) {
+            previousData = functor(v, previousData);
+            return { done: false, value: previousData as any };
+          }
+
+          return { done: true };
+        },
+      });
+    }
+
+    return this as unknown as Stream<V>;
+  }
+
+  /**
+   * Retrieves the first value from the stream as a new stream. Important Note: the original stream cannot be executed
+   * before head() is invoked, otherwise the stream returned by head() will throw an error, as the first value was
+   * already consumed elsewhere
+   */
+  head(): Stream<T> {
+    return new Stream<T>(async () => {
+      return new ExecutorState(true, await this.execute());
+    });
+  }
+
+  /**
+   * Returns a new stream that exhausts the original stream, yielding the last value received before the original
+   * stream ended
+   */
+  tail(): Stream<T> {
+    let lastRecord: any = null;
+    return new Stream<T>(async () => {
+      for await (const value of this) {
+        lastRecord = value;
+      }
+      return new ExecutorState(true, lastRecord);
+    });
+  }
+
   /**
    * group data on the stream into separate slices
    * E.g. Stream yielding 1,2,3,4,5,6 with chunk of 2 => [1,2], [3,4], [5,6]
@@ -269,6 +358,10 @@ export class Stream<T> implements AsyncGenerator<T> {
       this.actions.push({
         type: ActionType.PACK,
         functor: (v) => {
+          if (v === undefined || v === null) {
+            return { done: true, value: chunkedResults.length > 0 ? chunkedResults : undefined } as any;
+          }
+
           chunkedResults.push(v);
           if (chunkedResults.length >= value) {
             const data = chunkedResults;
@@ -325,16 +418,51 @@ export class Stream<T> implements AsyncGenerator<T> {
    * Limits the number of times the stream can yield a value
    * @param count
    */
-  take(count: number) {
+  take(count: number): Stream<T> {
     let index = 0;
+    return this.takeWhile(() => ++index <= count);
+  }
 
+  takeWhile(predicate: (v: T) => boolean): Stream<T> {
     this.actions.push({
       type: ActionType.LIMIT,
       functor: (value) => {
-        index++;
-        if (index === count) return { done: true, value };
-        else if (index > count) return { done: true };
-        return { value, done: false };
+        if (predicate(value)) {
+          return { value, done: false };
+        }
+        return { done: true };
+      },
+    });
+    return this;
+  }
+
+  skipWhile(predicate: (v: T) => boolean): Stream<T> {
+    let startFound = false;
+    this.actions.push({
+      type: ActionType.FILTER,
+      functor: (value) => {
+        if (!startFound && predicate(value)) {
+          return null as T;
+        }
+        startFound = true;
+        return value;
+      },
+    });
+    return this;
+  }
+
+  dropRepeats(uniqKeyExtractor: (v: T) => string, expiryPeriod: WaitPeriod | undefined = undefined): Stream<T> {
+    const cache = new TimeableObject<string, number>(undefined, expiryPeriod);
+
+    this.actions.push({
+      type: ActionType.FILTER,
+      functor: async (v) => {
+        const guid = uniqKeyExtractor(v);
+        if (!cache.has(guid)) {
+          cache.set(guid, 1);
+          return v;
+        }
+        return null as T;
       },
     });
     return this;
@@ -548,6 +676,7 @@ export class Stream<T> implements AsyncGenerator<T> {
   ): Promise<{ state: State; value?: T }> {
     this.executed = true;
     let i = 0;
+    let traversableActions = this.actions;
     let data: any;
 
     try {
@@ -565,7 +694,11 @@ export class Stream<T> implements AsyncGenerator<T> {
               data = data.value;
 
               if (!this.canRunExecutor && (data === null || data === undefined)) {
-                return { state: State.DONE };
+                [data, traversableActions] = await this.findAndExecuteMostRecentPacker();
+
+                if (data === undefined) {
+                  return { state: State.DONE };
+                }
               }
             }
             if (data instanceof Promise) data = await data;
@@ -578,18 +711,22 @@ export class Stream<T> implements AsyncGenerator<T> {
           } while (data instanceof ExecutorState);
         } while (data === undefined && this.canRunExecutor);
       } else {
-        return { state: State.DONE };
+        [data, traversableActions] = await this.findAndExecuteMostRecentPacker();
+
+        if (data === undefined) {
+          return { state: State.DONE };
+        }
       }
     } catch (e) {
-      const [value, index] = await this.processError(e, i);
+      const [value, index] = await this.processError(e, i, traversableActions);
       i = index + 1;
       if (value === undefined || value === null) return { state: State.CONTINUE };
       data = value;
     }
 
-    for (; i < this.actions.length; i++) {
+    for (; i < traversableActions.length; i++) {
       try {
-        const { type, functor } = this.actions[i];
+        const { type, functor } = traversableActions[i];
         switch (type) {
           case ActionType.FILTER: {
             const preResult = await this.yieldTrueResult(preProcessor(data));
@@ -636,7 +773,7 @@ export class Stream<T> implements AsyncGenerator<T> {
             if (result.done) {
               this.canRunExecutor = false;
               this.backlog = [];
-              this.actions = this.actions.splice(i + 1);
+              this.actions = traversableActions.splice(i + 1);
               i = -1;
             }
             data = result.value;
@@ -660,7 +797,7 @@ export class Stream<T> implements AsyncGenerator<T> {
           }
         }
       } catch (error: unknown) {
-        const [value, index] = await this.processError(error, i);
+        const [value, index] = await this.processError(error, i, traversableActions);
         i = index;
         if (value !== undefined && value !== null) data = value;
       }
@@ -668,14 +805,18 @@ export class Stream<T> implements AsyncGenerator<T> {
     return { state: State.MATCHED, value: data };
   }
 
-  private async processError(error: unknown, i: number): Promise<[any, number]> {
+  private async processError(
+    error: unknown,
+    i: number,
+    actions: Array<{ type: ActionType; functor: ActionFunctor<T> }>
+  ): Promise<[any, number]> {
     let errorMessage: Error;
 
-    if (this.actions.length === 0) throw error;
+    if (actions.length === 0) throw error;
     else if (!(error instanceof Error)) errorMessage = new Error(error as string);
     else errorMessage = error;
 
-    const catchAction = this.actions.splice(i + 1).find((v, index) => {
+    const catchAction = actions.splice(i + 1).find((v, index) => {
       if (v.type === ActionType.CATCH) {
         i = index;
         return true;
@@ -687,8 +828,22 @@ export class Stream<T> implements AsyncGenerator<T> {
       const value = catchAction.functor(errorMessage as any);
       return [await this.yieldTrueResult(value), i];
     } catch (e) {
-      return await this.processError(e, i);
+      return await this.processError(e, i, actions);
     }
+  }
+
+  private async findAndExecuteMostRecentPacker(): Promise<
+    [T | undefined, Array<{ type: ActionType; functor: ActionFunctor<T> }>]
+  > {
+    const index = this.actions.findIndex((action) => action.type === ActionType.PACK);
+    if (index >= 0) {
+      const functor = this.actions[index].functor;
+      const result = (await this.yieldTrueResult(functor(undefined as any))) as LimitResult<T>;
+      if (result.done) {
+        return [result.value, this.actions.slice(index + 1)];
+      }
+    }
+    return [undefined, []];
   }
 
   private async yieldTrueResult(value: any) {
