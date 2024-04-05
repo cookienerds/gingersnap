@@ -1,4 +1,4 @@
-import { Stream } from "../../utils";
+import { Stream } from "../../stream";
 
 export class CyclicalList<T> extends Array<T> {
   /**

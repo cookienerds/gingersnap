@@ -1,16 +1,17 @@
-import { GingerSnap } from "../src/annotations";
+import { GingerSnap } from "../src/networking";
 import { User, UserService } from "./mocks/user";
 import * as R from "ramda";
 import { UtilService } from "./mocks/util";
 import { AuthService } from "./mocks/auth";
-import { THROTTLE_DEFAULT_MS } from "../src/annotations/service/network";
+import { THROTTLE_DEFAULT_SEC } from "../src/networking/decorators";
 import {
   createModelClassAnnotationTag,
   createModelFieldAnnotationTag,
   getModelClassAnnotationTagProperties,
   getModelFieldAnnotationTagProperties,
-} from "../src/utils/plugin";
-import { Field, Model } from "../src/annotations/model";
+  Field,
+  Model,
+} from "../src/data/model";
 import { StreamUser, UserStream } from "./mocks/stream";
 import WS from "jest-websocket-mock";
 import { users } from "./data/users.json";
@@ -131,7 +132,7 @@ describe("Test Network Service", function () {
     expect(resp instanceof User).toBeTruthy();
     expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
 
-    const resp2 = await service.createUser2('test').execute();
+    const resp2 = await service.createUser2("test").execute();
     expect(resp2 instanceof User).toBeTruthy();
     expect(resp2.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
   });
@@ -348,7 +349,7 @@ describe("Test Network Service", function () {
     const start = performance.now();
     const resp = await service.healthCheck().execute();
     const end = performance.now();
-    expect(end - start).toBeGreaterThanOrEqual(THROTTLE_DEFAULT_MS * 3);
+    expect(end - start).toBeGreaterThanOrEqual(THROTTLE_DEFAULT_SEC * 3);
     expect(resp).toBe("check");
     expect(called).toBe(4);
   });

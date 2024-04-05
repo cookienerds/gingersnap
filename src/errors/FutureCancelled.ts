@@ -1,3 +1,6 @@
-import FutureError from "./FutureError";
+import { FutureError } from "./FutureError";
 
-export default class FutureCancelled extends FutureError {}
+/**
+ * Error thrown when a future is cancelled
+ */
+export class FutureCancelled extends FutureError {}

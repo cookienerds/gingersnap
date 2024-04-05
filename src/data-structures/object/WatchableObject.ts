@@ -1,6 +1,8 @@
 import { WaitableObject } from "./WaitableObject";
-import { Future, Queue, Stream, WaitPeriod } from "../../utils";
+import { Future, WaitPeriod } from "../../future";
+import { Stream } from "../../stream";
 import * as R from "ramda";
+import { Queue } from "./Queue";
 
 type GetListener<T> = (property: T) => void;
 type SetListener<T, K> = (property: T, oldValue: K | undefined, newValue: K) => void;

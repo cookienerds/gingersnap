@@ -1,8 +1,8 @@
-import { RequestType } from "./annotations/service/types";
-import { Future, ObjectOf, WaitPeriod } from "./utils";
-import { AbortError } from "./error";
-import { VerificationError } from "./errors/VerificationError";
-import { HTTPStatus } from "./service";
+import { RequestType } from "./networking/types";
+import { VerificationError, AbortError } from "./errors";
+import { ObjectOf } from "./typing/types";
+import { HTTPStatus } from "./networking";
+import { Future, WaitPeriod } from "./future";
 
 type Validator = (matches: Response[]) => boolean;
 

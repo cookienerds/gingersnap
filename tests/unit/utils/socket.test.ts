@@ -1,8 +1,8 @@
 import WS from "jest-websocket-mock";
-import { StreamableWebSocket } from "../../../src/utils/socket";
-import NetworkError from "../../../src/errors/NetworkError";
-import { HTTPStatus } from "../../../src/annotations/service/network";
-import { Future } from "../../../src/utils";
+import { StreamableWebSocket } from "../../../src/socket";
+import { NetworkError } from "../../../src/errors";
+import { HTTPStatus } from "../../../src/networking";
+import { Future } from "../../../src/future";
 
 describe("Browser WebSocket", function () {
   const url = "ws://localhost.com";

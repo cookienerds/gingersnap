@@ -1,1 +1,1 @@
-export default class QueueEmptyError extends Error {}
+export class QueueEmptyError extends Error {}

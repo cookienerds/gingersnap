@@ -1,7 +1,5 @@
-import { Future, FutureGroup, FutureResult } from "../../../src/utils/future";
-import FutureCancelled from "../../../src/errors/FutureCancelled";
-import TimeoutError from "../../../src/errors/TimeoutError";
-import FutureError from "../../../src/errors/FutureError";
+import { Future, FutureGroup, FutureResult } from "../../../src/future";
+import { FutureCancelled, TimeoutError, FutureError } from "../../../src/errors";
 
 describe("Futures", function () {
   it("should fulfill successfully", async () => {

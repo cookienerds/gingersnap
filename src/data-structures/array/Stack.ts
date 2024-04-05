@@ -1,7 +1,8 @@
 import { CyclicalList } from "./CyclicalList";
-import NotImplemented from "../../errors/NotImplemented";
-import StackEmptyError from "../../errors/StackEmptyError";
-import { Future, FutureEvent, Stream } from "../../utils";
+import { NotImplemented, StackEmptyError } from "../../errors";
+import { FutureEvent } from "../../synchronize";
+import { Stream } from "../../stream";
+import { Future } from "../../future";
 
 /**
  * Stack data structure for Last In First Out operation (LIFO)

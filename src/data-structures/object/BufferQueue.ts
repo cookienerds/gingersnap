@@ -1,7 +1,9 @@
 import { WatchableObject } from "./WatchableObject";
 import { TimeableObject } from "./TimeableObject";
-import { ExecutorState, Future, Stream, WaitPeriod } from "../../utils";
 import * as R from "ramda";
+import { WaitPeriod } from "../../future";
+import { Stream } from "../../stream";
+import { ExecutorState } from "../../stream/state";
 
 /**
  * Queue data structure that is iterable, but never can dequeue

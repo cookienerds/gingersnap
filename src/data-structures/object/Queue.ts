@@ -1,6 +1,7 @@
 import { WatchableObject } from "./WatchableObject";
-import QueueEmptyError from "../../errors/QueueEmptyError";
-import { Future, Stream, WaitPeriod } from "../../utils";
+import { QueueEmptyError } from "../../errors";
+import { Future, WaitPeriod } from "../../future";
+import { Stream } from "../../stream";
 
 /**
  * Queue data structure for First In First Out operation (FIFO)

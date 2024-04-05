@@ -1,6 +1,6 @@
 import hash from "object-hash";
 import { CyclicalObject } from "./CyclicalObject";
-import { Future, WaitPeriod } from "../../utils/future";
+import { Future, WaitPeriod } from "../../future";
 
 /**
  * Object that has key value pairs that can expire

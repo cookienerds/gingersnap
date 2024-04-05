@@ -1,6 +1,6 @@
 import { User } from "../../mocks/user";
 import * as R from "ramda";
-import ParsingError from "../../../src/errors/ParsingError";
+import { ParsingError } from "../../../src/errors";
 import {
   Model,
   Validator,
@@ -10,8 +10,8 @@ import {
   UpperBound,
   Range,
   RaiseError,
-  Optional
-} from "../../../src/annotations/model";
+  Optional,
+} from "../../../src/data/model";
 
 const MOCKED_USER = {
   name: "Will Carter",
