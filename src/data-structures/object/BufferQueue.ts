@@ -1,7 +1,7 @@
 import { WatchableObject } from "./WatchableObject";
 import { TimeableObject } from "./TimeableObject";
 import * as R from "ramda";
-import { WaitPeriod } from "../../future";
+import { Future, WaitPeriod } from "../../future";
 import { Stream } from "../../stream";
 import { ExecutorState } from "../../stream/state";
 
@@ -18,6 +18,10 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
     this.tail = 0;
     this.head = 0;
     this.tracker = new TimeableObject(objectMaxSize, expiryPeriod);
+  }
+
+  ingest(stream: Stream<T>): Future<void> {
+    return this.ingestStream(stream, (data) => this.enqueue(data));
   }
 
   streamEntries(ignoreCache = false): Stream<T> {

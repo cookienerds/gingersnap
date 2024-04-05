@@ -15,3 +15,4 @@ export * from "./StackEmptyError";
 export * from "./StreamEnded";
 export * from "./TimeoutError";
 export * from "./VerificationError";
+export * from "./StackFullError";

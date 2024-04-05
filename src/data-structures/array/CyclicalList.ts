@@ -5,9 +5,9 @@ export class CyclicalList<T> extends Array<T> {
    * Pointer to the current index
    * @private
    */
-  private pointer: number;
+  protected pointer: number;
 
-  private readonly maxSize?: number;
+  protected readonly maxSize?: number;
 
   constructor(maxSize?: number) {
     super();
@@ -52,7 +52,7 @@ export class CyclicalList<T> extends Array<T> {
   }
 
   static from<T>(items: T[]) {
-    const list = new this<T>();
+    const list = new this<T>(items.length);
     for (const item of items) {
       list.push(item);
     }

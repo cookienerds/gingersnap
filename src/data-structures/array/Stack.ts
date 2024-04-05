@@ -1,5 +1,5 @@
 import { CyclicalList } from "./CyclicalList";
-import { NotImplemented, StackEmptyError } from "../../errors";
+import { NotImplemented, StackEmptyError, StackFullError } from "../../errors";
 import { FutureEvent } from "../../synchronize";
 import { Stream } from "../../stream";
 import { Future } from "../../future";
@@ -9,9 +9,11 @@ import { Future } from "../../future";
  */
 export class Stack<T> extends CyclicalList<T> {
   private readonly evt: FutureEvent;
+  private totalEntries: number;
 
-  constructor(maxSize: number) {
+  constructor(maxSize?: number) {
     super(maxSize);
+    this.totalEntries = 0;
     this.evt = new FutureEvent();
   }
 
@@ -29,12 +31,17 @@ export class Stack<T> extends CyclicalList<T> {
 
   push(...items): number {
     this.evt.set();
+    this.totalEntries++;
+    if (this.maxSize && this.totalEntries > this.maxSize) {
+      throw new StackFullError();
+    }
     return super.push(...items);
   }
 
   pop() {
     if (this.length === 0) throw new StackEmptyError();
     this.evt.clear();
+    this.totalEntries--;
     return super.pop() as T;
   }
 
@@ -58,21 +65,28 @@ export class Stack<T> extends CyclicalList<T> {
    * Retrieves the last item added to the stack
    */
   peek() {
-    return this[this.length - 1];
+    return this[this.pointer];
   }
 
   /**
    * Checks if the stack is empty
    */
   get empty() {
-    return this.length === 0;
+    return this.totalEntries === 0;
+  }
+
+  /**
+   * Checks if the stack is full
+   */
+  get full() {
+    return this.size() === this.maxSize;
   }
 
   /**
    * Retrieves the current stack size
    */
   size() {
-    return this.length;
+    return this.totalEntries;
   }
 
   /**

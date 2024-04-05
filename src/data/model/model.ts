@@ -358,6 +358,10 @@ export class Model {
     return (Object.getPrototypeOf(this) as Model).schema(format);
   }
 
+  toString() {
+    return this.json(true);
+  }
+
   /**
    * Constructs the model properties by traversing the inheritance tree of the current Model being instantiated
    * @param modelPrototype prototype of the model

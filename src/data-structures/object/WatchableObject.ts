@@ -47,6 +47,23 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
     this.valuesListeners = [];
   }
 
+  /**
+   * Ingest data from the given stream into the queue. The future returned is
+   * already scheduled to execute in the background. However, you can cancel
+   * ingestion at anytime by cancelling the returned future
+   *
+   * Important Note:
+   * - Cancelling the ingestion does not kill the stream, only stops
+   * monitoring the stream for incoming data
+   * - If ingestion is cancelled and data had been retrieved at that period, the
+   * data will discarded
+   * @param stream input data stream
+   * @param keyExtractor used to get the key for storing the incoming data
+   */
+  ingest(stream: Stream<K>, keyExtractor: (v: K) => T): Future<void> {
+    return this.ingestStream(stream, (data) => this.set(keyExtractor(data), data));
+  }
+
   clone() {
     return super.clone() as WatchableObject<T, K>;
   }
@@ -201,5 +218,26 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
       .thenApply(() => this.valuesListeners.forEach((listener) => listener()))
       .run();
     return super.values(copy);
+  }
+
+  protected ingestStream(stream: Stream<K>, handler: (v: K) => void): Future<void> {
+    return Future.of<void>(async (_, __, signal) => {
+      for await (const data of stream) {
+        while (!signal.aborted && this.objectMaxSize && this.size() === this.objectMaxSize) {
+          await Future.of((resolve, _, signal) => {
+            const cancel = this.onDelete(() => {
+              cancel();
+              resolve(null);
+            });
+            signal.onabort = cancel;
+          }).registerSignal(signal);
+        }
+
+        if (signal.aborted) {
+          break;
+        }
+        handler(data);
+      }
+    }).schedule();
   }
 }

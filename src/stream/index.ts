@@ -4,6 +4,7 @@ import { AnyDataType, Flattened, InferErrorResult, InferStreamResult } from "../
 import { Future, FutureResult, WaitPeriod } from "../future";
 import { TimeableObject } from "../data-structures/object/TimeableObject";
 import { ExecutorState } from "./state";
+import { Collector, Collectors } from "./collector";
 
 enum ActionType {
   TRANSFORM,
@@ -24,6 +25,7 @@ interface LimitResult<T> {
   value?: T;
   done: boolean;
 }
+
 type ActionFunctor<T> = (v: T) => T | null | Promise<T> | LimitResult<T> | Promise<LimitResult<T>> | Stream<T>;
 export type Executor = (v: AbortSignal) => Promise<any> | Future<any> | AnyDataType | ExecutorState<any> | Stream<any>;
 
@@ -543,19 +545,8 @@ export class Stream<T> implements AsyncGenerator<T> {
   /**
    * Consumes the entire stream and store the data in an array
    */
-  collect(): Future<T[]> {
-    return new Future(async (resolve, reject) => {
-      const collection: T[] = [];
-
-      try {
-        for await (const value of this) {
-          collection.push(value);
-        }
-        resolve(collection);
-      } catch (error: any) {
-        reject(error instanceof FutureError ? error : new FutureError((error?.message as string) ?? "Unknown"));
-      }
-    });
+  collect<K>(collector: Collector<K, T>): Future<K> {
+    return collector(this);
   }
 
   /**
