@@ -91,11 +91,11 @@ export class WebSocketService extends NetworkService {
             }
 
             if (body instanceof Model) {
-              this.socket.send(body.blob());
+              await this.socket.send(body.blob());
             } else if (body instanceof ArrayBuffer || body instanceof Blob) {
-              this.socket.send(body);
+              await this.socket.send(body);
             } else {
-              this.socket.send(JSON.stringify(body));
+              await this.socket.send(JSON.stringify(body));
             }
             const result = oldMethod();
             if (result instanceof Promise) {

@@ -2,7 +2,6 @@ import { WatchableObject } from "./WatchableObject";
 import { QueueEmptyError } from "../../errors";
 import { Future, WaitPeriod } from "../../future";
 import { Stream } from "../../stream";
-import { reject } from "ramda";
 
 /**
  * Queue data structure for First In First Out operation (FIFO)

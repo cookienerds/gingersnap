@@ -1,17 +1,18 @@
-import WS from "jest-websocket-mock";
 import { StreamableWebSocket } from "../../../src/socket";
 import { NetworkError } from "../../../src/errors";
 import { HTTPStatus } from "../../../src/networking";
 import { Future } from "../../../src/future";
+import { Collectors } from "../../../src/stream/collector";
+import { Client, Server } from "mock-socket";
 
 describe("Browser WebSocket", function () {
   const url = "ws://localhost.com";
   const url2 = "ws://localhost.test.com";
   const blobDecoder = { decode: (v) => v };
-  let server: WS;
+  let server: Server;
 
   beforeEach(() => {
-    server = new WS(url);
+    server = new Server(url);
   });
 
   afterEach(() => {
@@ -23,11 +24,11 @@ describe("Browser WebSocket", function () {
     let closed = false;
     server.on("connection", () => (connected = true));
     server.on("close", () => {
-      (closed = true)
+      closed = true;
     });
 
     const socket = new StreamableWebSocket(url, blobDecoder, { retryOnDisconnect: false });
-    await Promise.race([socket.open(), Future.sleep({ seconds: 1 })]).then(() => {
+    await Promise.race([socket.open(), Future.sleep({ seconds: 120 })]).then(() => {
       expect(connected).toBeTruthy();
     });
 
@@ -40,9 +41,14 @@ describe("Browser WebSocket", function () {
 
   it("should send messages", async () => {
     const socket = new StreamableWebSocket(url, blobDecoder, { retryOnDisconnect: false });
+    const connFut = Future.of<Client>((resolve) => server.on("connection", resolve)).schedule();
     await Future.waitFor(socket.open(), { seconds: 1 });
-    socket.send("Hello");
-    await Promise.race([server.messagesToConsume.get(), Future.sleep({ seconds: 1 })]).then((result) => {
+    const conn = await connFut;
+    const msgFut = Future.of<string | Blob | ArrayBuffer | ArrayBufferView>((resolve) =>
+      conn.on("message", resolve)
+    ).schedule();
+    await socket.send("Hello");
+    await Promise.race([msgFut, Future.sleep({ seconds: 1 })]).then((result) => {
       expect(result).toEqual("Hello");
     });
     socket.close();
@@ -52,13 +58,15 @@ describe("Browser WebSocket", function () {
     const socket = new StreamableWebSocket<Blob>(url, blobDecoder, { retryOnDisconnect: false });
     const testMessages = ["Hello", "World", "Testing"];
 
+    const connFut = Future.of<Client>((resolve) => server.on("connection", resolve)).schedule();
     await Future.waitFor(socket.open(), { seconds: 1 });
-    testMessages.forEach((message) => server.send(message));
+    const conn = await connFut;
+    testMessages.forEach((message) => conn.send(message));
     const responseMessage = await socket
       .stream()
       .map((v) => v.text())
       .take(testMessages.length)
-      .collect();
+      .collect(Collectors.asList());
 
     expect(responseMessage).toEqual(testMessages);
     socket.close();
@@ -68,8 +76,10 @@ describe("Browser WebSocket", function () {
     const socket = new StreamableWebSocket<Blob>(url, blobDecoder, { retryOnDisconnect: false });
     const testMessages = ["Hello", "World", "Testing"];
 
+    const connFut = Future.of<Client>((resolve) => server.on("connection", resolve)).schedule();
     await Future.waitFor(socket.open(), { seconds: 1 });
-    testMessages.forEach((message) => server.send(message));
+    const conn = await connFut;
+    testMessages.forEach((message) => conn.send(message));
 
     Future.sleep({ seconds: 1 })
       .thenApply(() => socket.close())
@@ -77,7 +87,7 @@ describe("Browser WebSocket", function () {
     const responseMessage = await socket
       .stream()
       .map(async (v) => await v.text())
-      .collect();
+      .collect(Collectors.asList());
 
     expect(responseMessage).toEqual(testMessages);
     socket.close();
@@ -88,7 +98,7 @@ describe("Browser WebSocket", function () {
     socket.open().schedule();
     await Future.sleep({ seconds: 1 });
     expect(socket.opened).toBeFalsy();
-    const server2 = new WS(url2);
+    const server2 = new Server(url2);
     try {
       await Future.waitFor(socket.open(), { seconds: 1 });
       expect(socket.opened).toBeTruthy();

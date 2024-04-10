@@ -4,7 +4,7 @@ import * as R from "ramda";
 import { Call } from "../stream/call";
 import { CallExecutionError } from "../errors";
 import { GingerSnapProps } from "./index";
-import { HTTPStatus, THROTTLE_DEFAULT_SEC } from "./decorators";
+import { HTTPStatus, THROTTLE_DEFAULT_MS } from "./decorators";
 import { request } from "./request";
 import { Future } from "../future";
 
@@ -148,7 +148,7 @@ export class NetworkService {
                   self.retryLimit &&
                   retries < self.retryLimit
                 ) {
-                  return Future.sleep(THROTTLE_DEFAULT_SEC).thenApply(() => lookup(retries + 1));
+                  return Future.sleep({ milliseconds: THROTTLE_DEFAULT_MS }).thenApply(() => lookup(retries + 1));
                 }
                 return resp;
               });

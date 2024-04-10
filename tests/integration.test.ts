@@ -3,7 +3,7 @@ import { User, UserService } from "./mocks/user";
 import * as R from "ramda";
 import { UtilService } from "./mocks/util";
 import { AuthService } from "./mocks/auth";
-import { THROTTLE_DEFAULT_SEC } from "../src/networking/decorators";
+import { THROTTLE_DEFAULT_MS } from "../src/networking/decorators";
 import {
   createModelClassAnnotationTag,
   createModelFieldAnnotationTag,
@@ -13,8 +13,10 @@ import {
   Model,
 } from "../src/data/model";
 import { StreamUser, UserStream } from "./mocks/stream";
-import WS from "jest-websocket-mock";
+import { Client, Server } from "mock-socket";
 import { users } from "./data/users.json";
+import { Collectors } from "../src/stream/collector";
+import { Future } from "../src/future";
 
 jest.setTimeout(10000);
 
@@ -349,7 +351,7 @@ describe("Test Network Service", function () {
     const start = performance.now();
     const resp = await service.healthCheck().execute();
     const end = performance.now();
-    expect(end - start).toBeGreaterThanOrEqual(THROTTLE_DEFAULT_SEC * 3);
+    expect(end - start).toBeGreaterThanOrEqual(THROTTLE_DEFAULT_MS * 3);
     expect(resp).toBe("check");
     expect(called).toBe(4);
   });
@@ -409,12 +411,15 @@ describe("Test Network Service", function () {
 
   it("should stream users from socket", async () => {
     const url = "ws://localhost.com";
-    const server = new WS(url);
+    const server = new Server(url);
     const snap = new GingerSnap({ baseUrl: url });
     const service = snap.create(UserStream);
+    const connFut = Future.of<Client>((resolve) => server.on("connection", resolve)).schedule();
     await service.ready();
-    users.forEach((user) => server.send(JSON.stringify(user)));
-    expect(await service.getDCUsers().take(2).collect()).toEqual(
+    const streamFut = service.getDCUsers().take(2).collect(Collectors.asList()).schedule();
+    const conn = await connFut;
+    users.forEach((user) => conn.send(JSON.stringify(user)));
+    expect(await streamFut).toEqual(
       users
         .filter((v) => v.address.state === "DC")
         .slice(0, 2)

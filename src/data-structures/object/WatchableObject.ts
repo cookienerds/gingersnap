@@ -2,7 +2,9 @@ import { WaitableObject } from "./WaitableObject";
 import { Future, WaitPeriod } from "../../future";
 import { Stream } from "../../stream";
 import * as R from "ramda";
-import { Queue } from "./Queue";
+import { SimpleQueue } from "./SimpleQueue";
+import { FutureEvent } from "../../synchronize";
+import { ExecutorState } from "../../stream/state";
 
 type GetListener<T> = (property: T) => void;
 type SetListener<T, K> = (property: T, oldValue: K | undefined, newValue: K) => void;
@@ -70,40 +72,51 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
 
   /**
    * Stream of changes made to the object via SET, DELETE or CLEAR commands
-   * @param queueSize
    */
-  changeStream(queueSize?: number) {
-    const queue = new Queue<WatchableChange<T, K>>(queueSize);
-    const cancelSet = this.onSet((key, oldValue, newValue) =>
+  changeStream() {
+    const evt = new FutureEvent();
+    const queue = new SimpleQueue<WatchableChange<T, K>>();
+    const cancelSet = this.onSet((key, oldValue, newValue) => {
       queue.enqueue({
         type: WatchableObjectOperations.SET,
         key,
         oldValue,
         newValue,
-      })
-    );
-    const cancelDelete = this.onDelete((key, oldValue) =>
+      });
+      evt.set();
+    });
+    const cancelDelete = this.onDelete((key, oldValue) => {
       queue.enqueue({
         type: WatchableObjectOperations.DELETE,
         key,
         oldValue,
-      })
-    );
-    const cancelClear = this.onClear(() =>
+      });
+      evt.set();
+    });
+    const cancelClear = this.onClear(() => {
       queue.enqueue({
         type: WatchableObjectOperations.CLEAR,
         key: "*" as any,
-      })
-    );
+      });
+      evt.set();
+    });
     const cleanup = R.once(() => {
       cancelClear();
       cancelSet();
       cancelDelete();
     });
 
-    return new Stream<WatchableChange<T, K>>((signal) => {
+    return new Stream<WatchableChange<T, K>>(async (signal) => {
       signal.onabort = cleanup;
-      return queue.awaitDequeue(signal);
+      while (queue.empty && !signal.aborted) {
+        await evt.wait();
+        evt.clear();
+      }
+
+      if (signal.aborted) {
+        return new ExecutorState(true);
+      }
+      return queue.dequeue();
     });
   }
 

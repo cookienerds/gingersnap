@@ -11,7 +11,7 @@ interface ResponseDetails {
   format?: DataFormat;
 }
 /// //// Constants ///////
-export const THROTTLE_DEFAULT_SEC = 3;
+export const THROTTLE_DEFAULT_MS = 3000;
 const SUPPORTED_HEADER_VALUES = ["String", "Number", "Boolean"];
 
 /// // // Helpers ///////
@@ -130,7 +130,7 @@ export const Headers = (value: MapOfHeaders) => (target: any, propertyKey: strin
 export const Throttle = (target: any, propertyKey: string) => {
   const proto = createProps(target.constructor);
   const lens = R.lensPath(["methodConfig", propertyKey, "throttle"]);
-  proto.__internal__ = R.set(lens, { waitPeriodInMs: THROTTLE_DEFAULT_SEC }, proto.__internal__);
+  proto.__internal__ = R.set(lens, { waitPeriodInMs: THROTTLE_DEFAULT_MS }, proto.__internal__);
 };
 
 /**

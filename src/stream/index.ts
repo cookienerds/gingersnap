@@ -420,7 +420,16 @@ export class Stream<T> implements AsyncGenerator<T> {
    */
   take(count: number): Stream<T> {
     let index = 0;
-    return this.takeWhile(() => ++index <= count);
+    this.actions.push({
+      type: ActionType.LIMIT,
+      functor: (value) => {
+        if (++index < count) {
+          return { value, done: false };
+        }
+        return { done: true, value };
+      },
+    });
+    return this;
   }
 
   takeWhile(predicate: (v: T) => boolean): Stream<T> {
@@ -763,6 +772,7 @@ export class Stream<T> implements AsyncGenerator<T> {
               this.canRunExecutor = false;
               this.backlog = [];
               this.actions = traversableActions.splice(i + 1);
+              traversableActions = this.actions;
               i = -1;
             }
             data = result.value;

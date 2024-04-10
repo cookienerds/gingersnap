@@ -5,7 +5,7 @@ import { Future, WaitPeriod } from "./future";
 import { Decoder } from "./data/decoders";
 import { FutureEvent, Lock } from "./synchronize";
 import { ExecutorState } from "./stream/state";
-import WebSocket from "isomorphic-ws";
+import WebSocket from "modern-isomorphic-ws";
 
 type SocketFunctor<T extends CloseEvent | Event | MessageEvent> = (this: WebSocket, evt: T) => any;
 
@@ -149,7 +149,10 @@ export class StreamableWebSocket<T> {
         const cancelQueue = this.addEventListener("message", (evt: MessageEvent) =>
           this.dataProcessingLock
             .with(async () => {
-              const data = typeof evt.data === "string" ? new Blob([evt.data]) : (evt.data as Blob);
+              const data =
+                typeof evt.data === "string" || evt.data instanceof ArrayBuffer
+                  ? new Blob([evt.data])
+                  : (evt.data as Blob);
               let result = this.decoder.decode(data);
 
               if (result instanceof Future || result instanceof Promise) {
@@ -200,8 +203,8 @@ export class StreamableWebSocket<T> {
    * Sends data via socket
    * @param data
    */
-  send(data: string | ArrayBufferView | Blob | ArrayBufferLike) {
-    this.getSocket()?.send(data);
+  async send(data: string | ArrayBufferView | Blob | ArrayBufferLike) {
+    this.getSocket()?.send(data instanceof Blob ? await data.arrayBuffer() : data);
   }
 
   /**
@@ -237,19 +240,19 @@ export class StreamableWebSocket<T> {
   ) {
     this.socketListeners.push([type, functor]);
     if (this.socket) {
-      this.socket.addEventListener(type, functor as any);
+      this.socket.addEventListener(type as any, functor as any);
     }
 
     return () => {
       this.socketListeners = this.socketListeners.filter(([t, f]) => f !== functor && t !== type);
-      if (this.socket) this.socket.removeEventListener(type, functor as any);
+      if (this.socket) this.socket.removeEventListener(type as any, functor as any);
     };
   }
 
   private createSocket() {
     const socket = new WebSocket(this.url);
-    socket.binaryType = "blob";
-    this.socketListeners.forEach(([type, functor]) => socket.addEventListener(type, functor));
+    socket.binaryType = "arraybuffer";
+    this.socketListeners.forEach(([type, functor]) => socket.addEventListener(type as any, functor));
     this.socket = socket;
     return socket;
   }
