@@ -114,7 +114,7 @@ typescript know the value will exist, and if it doesn't exist an error will auto
 
 ```ts
 // src/post.model.ts
-import { Field, Model } from "@cookienerds/gingersnap/annotations/model";
+import { Field, Model } from "@cookienerds/gingersnap/data/model";
 
 export class Post extends Model {
     @Field() // maps the "id" field in the post JSON data to the id property
@@ -142,8 +142,8 @@ import {
   JSONResponse, 
   GET,
   Service,
-} from "@cookienerds/gingersnap/annotations/service";
-import { Call } from "@cookienerds/gingersnap";
+} from "@cookienerds/gingersnap/networking";
+import { Call } from "@cookienerds/gingersnap/stream/call";
 import { Post } from "./post.model";
 
 export class PostService extends Service { // [!code focus]
@@ -168,8 +168,8 @@ import {
   JSONResponse, 
   GET,
   Service,
-} from "@cookienerds/gingersnap/annotations/service";
-import { Call } from "@cookienerds/gingersnap";
+} from "@cookienerds/gingersnap/networking";
+import { Call } from "@cookienerds/gingersnap/stream/call";
 import { Post } from "./post.model";
 
 export class PostService extends Service {
@@ -191,8 +191,8 @@ import {
   JSONResponse, 
   GET,
   Service,
-} from "@cookienerds/gingersnap/annotations/service";
-import { Call } from "@cookienerds/gingersnap";
+} from "@cookienerds/gingersnap/networking";
+import { Call } from "@cookienerds/gingersnap/stream/call";
 import { Post } from "./post.model";
 
 export class PostService extends Service {
@@ -209,7 +209,7 @@ To tie it all together, we need to create an instance of the PostService. For th
 call creates the service and sets the baseUrl to https://jsonplaceholder.typicode.com.
 ```ts
 // src/main.ts
-import { GingerSnap } from "@cookienerds/gingersnap";
+import { GingerSnap } from "@cookienerds/gingersnap/networking";
 import { PostService } from "./post.service";
 
 async function main() {
@@ -229,7 +229,7 @@ To execute the **call** object returned from **getPosts**, we need to run the ex
 list of post objects.
 ```ts
 // src/main.ts
-import { GingerSnap } from "@cookienerds/gingersnap";
+import { GingerSnap } from "@cookienerds/gingersnap/networking";
 import { PostService } from "./post.service";
 
 async function main() {

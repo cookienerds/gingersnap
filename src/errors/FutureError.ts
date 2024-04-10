@@ -1,1 +1,6 @@
-export default class FutureError extends Error {}
+import { AbortError } from "./AbortError";
+
+/**
+ * Any type of error raised from a future
+ */
+export class FutureError extends AbortError {}

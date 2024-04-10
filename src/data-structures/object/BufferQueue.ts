@@ -1,7 +1,9 @@
 import { WatchableObject } from "./WatchableObject";
 import { TimeableObject } from "./TimeableObject";
-import { ExecutorState, Future, Stream, WaitPeriod } from "../../utils";
 import * as R from "ramda";
+import { Future, WaitPeriod } from "../../future";
+import { Stream } from "../../stream";
+import { ExecutorState } from "../../stream/state";
 
 /**
  * Queue data structure that is iterable, but never can dequeue
@@ -16,6 +18,10 @@ export class BufferQueue<T> extends WatchableObject<number, T> {
     this.tail = 0;
     this.head = 0;
     this.tracker = new TimeableObject(objectMaxSize, expiryPeriod);
+  }
+
+  ingest(stream: Stream<T>): Future<void> {
+    return this.ingestStream(stream, (data) => this.enqueue(data));
   }
 
   streamEntries(ignoreCache = false): Stream<T> {

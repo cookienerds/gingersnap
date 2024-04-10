@@ -18,10 +18,10 @@ import {
   XMLBody,
   NONE,
   PASS,
-} from "../../src/service";
+} from "../../src/networking";
 import { User } from "./user";
-import { BasicCredentials } from "../../src/annotations/model/credentials";
-import { Call } from "../../src/utils";
+import { BasicCredentials } from "../../src/data/model";
+import { Call } from "../../src/stream/call";
 
 @BaseUrl("https://test.com")
 export class UtilService extends NetworkService {

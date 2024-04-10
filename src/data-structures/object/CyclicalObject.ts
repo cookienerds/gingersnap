@@ -1,5 +1,5 @@
 import * as R from "ramda";
-import { Stream } from "../../utils";
+import { Stream } from "../../stream";
 
 /**
  * Object that is cyclical - has can store M keys, after which new key value pairs added override

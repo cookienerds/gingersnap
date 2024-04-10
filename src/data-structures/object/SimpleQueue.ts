@@ -1,3 +1,5 @@
+import { QueueEmptyError } from "../../errors";
+
 export class SimpleQueue<T> {
   private items: Map<number, T>;
   private head: number;
@@ -24,14 +26,22 @@ export class SimpleQueue<T> {
   }
 
   dequeue() {
+    if (this.empty) {
+      throw new QueueEmptyError();
+    }
+
     const item = this.items.get(this.head);
     this.items.delete(this.head);
     this.head++;
-    return item;
+    return item as T;
   }
 
   peek() {
-    return this.items.get(this.head);
+    if (this.empty) {
+      throw new QueueEmptyError();
+    }
+
+    return this.items.get(this.head) as T;
   }
 
   size(): number {

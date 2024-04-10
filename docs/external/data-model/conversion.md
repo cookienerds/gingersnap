@@ -11,7 +11,7 @@ described below.
 
 ```ts
 // src/profile.model.ts
-import { Field, Model } from "@cookienerds/gingersnap/annotations/model";
+import { Field, Model } from "@cookienerds/gingersnap/data/model";
 
 export class UserProfile extends Model {
     @Field() 
@@ -122,7 +122,7 @@ for [fromBlob](https://cookienerd-frameworks.gitlab.io/gingersnap/internal/class
 and [fromBuffer](https://cookienerd-frameworks.gitlab.io/gingersnap/internal/classes/annotations_model_model.Model.html#fromBuffer)
 
 ```ts
-// from @cookienerds/gingersnap/annotations/model
+// from @cookienerds/gingersnap/data/model
 export enum DataFormat {
   AVRO,
   CSV,
@@ -136,7 +136,7 @@ export enum DataFormat {
 ```ts
 // src/main.ts
 import { UserProfilePage } from "./profile.model";
-import { DataFormat } from '@cookienerds/gingersnap/annotations/model';
+import { DataFormat } from '@cookienerds/gingersnap/data/model';
 
 function main (data: Blob) {
   const profile: UserProfilePage = UserProfilePage.fromBlob(data, DataFormat.MESSAGE_PACK);

@@ -1,6 +1,7 @@
 import { WatchableObject } from "./WatchableObject";
-import QueueEmptyError from "../../errors/QueueEmptyError";
-import { Future, Stream, WaitPeriod } from "../../utils";
+import { QueueEmptyError } from "../../errors";
+import { Future, WaitPeriod } from "../../future";
+import { Stream } from "../../stream";
 
 /**
  * Queue data structure for First In First Out operation (FIFO)
@@ -24,6 +25,10 @@ export class Queue<T> extends WatchableObject<number, T> implements Iterator<T> 
     obj.head = this.head;
     obj.tail = this.tail;
     return obj as Queue<T>;
+  }
+
+  ingest(stream: Stream<T>): Future<void> {
+    return this.ingestStream(stream, (data) => this.enqueue(data));
   }
 
   enqueue(value: T) {

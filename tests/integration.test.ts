@@ -1,19 +1,22 @@
-import { GingerSnap } from "../src/annotations";
+import { GingerSnap } from "../src/networking";
 import { User, UserService } from "./mocks/user";
 import * as R from "ramda";
 import { UtilService } from "./mocks/util";
 import { AuthService } from "./mocks/auth";
-import { THROTTLE_DEFAULT_MS } from "../src/annotations/service/network";
+import { THROTTLE_DEFAULT_MS } from "../src/networking/decorators";
 import {
   createModelClassAnnotationTag,
   createModelFieldAnnotationTag,
   getModelClassAnnotationTagProperties,
   getModelFieldAnnotationTagProperties,
-} from "../src/utils/plugin";
-import { Field, Model } from "../src/annotations/model";
+  Field,
+  Model,
+} from "../src/data/model";
 import { StreamUser, UserStream } from "./mocks/stream";
-import WS from "jest-websocket-mock";
+import { Client, Server } from "mock-socket";
 import { users } from "./data/users.json";
+import { Collectors } from "../src/stream/collector";
+import { Future } from "../src/future";
 
 jest.setTimeout(10000);
 
@@ -131,7 +134,7 @@ describe("Test Network Service", function () {
     expect(resp instanceof User).toBeTruthy();
     expect(resp.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
 
-    const resp2 = await service.createUser2('test').execute();
+    const resp2 = await service.createUser2("test").execute();
     expect(resp2 instanceof User).toBeTruthy();
     expect(resp2.json()).toEqual(User.fromJSON(MOCKED_USERS[0]).json());
   });
@@ -408,12 +411,15 @@ describe("Test Network Service", function () {
 
   it("should stream users from socket", async () => {
     const url = "ws://localhost.com";
-    const server = new WS(url);
+    const server = new Server(url);
     const snap = new GingerSnap({ baseUrl: url });
     const service = snap.create(UserStream);
+    const connFut = Future.of<Client>((resolve) => server.on("connection", resolve)).schedule();
     await service.ready();
-    users.forEach((user) => server.send(JSON.stringify(user)));
-    expect(await service.getDCUsers().take(2).collect()).toEqual(
+    const streamFut = service.getDCUsers().take(2).collect(Collectors.asList()).schedule();
+    const conn = await connFut;
+    users.forEach((user) => conn.send(JSON.stringify(user)));
+    expect(await streamFut).toEqual(
       users
         .filter((v) => v.address.state === "DC")
         .slice(0, 2)

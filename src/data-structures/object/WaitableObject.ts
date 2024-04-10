@@ -1,5 +1,5 @@
 import { TimeableObject } from "./TimeableObject";
-import { Future, WaitPeriod } from "../../utils";
+import { Future, WaitPeriod } from "../../future";
 import { v4 as uuid } from "uuid";
 
 /**

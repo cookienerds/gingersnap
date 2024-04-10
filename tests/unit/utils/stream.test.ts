@@ -1,6 +1,7 @@
-import { Stream } from "../../../src/utils";
+import { Stream } from "../../../src/stream";
 import userData from "../../data/users.json";
 import * as R from "ramda";
+import { Collectors } from "../../../src/stream/collector";
 
 describe("Stream", () => {
   it("should bulk transform data", async () => {
@@ -14,7 +15,7 @@ describe("Stream", () => {
       .chunk(2)
       .flatten()
       .take(2)
-      .collect();
+      .collect(Collectors.asList());
     expect(result).toEqual(["Marcel Jones and Assunta Rath", "Trace Douglas and Enoch Lynch"]);
   });
 });

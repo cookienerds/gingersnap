@@ -14,13 +14,12 @@ import {
   Throttle,
   ThrottleBy,
   XMLResponse,
-  Field as SField
-} from "../../src/annotations/service/network";
-import { ArrayField, Field, Ignore, MapField, Model } from "../../src/annotations/model";
+  Field as SField,
+} from "../../src/networking/decorators";
+import { ArrayField, Field, Ignore, MapField, Model } from "../../src/data/model";
 import "reflect-metadata";
-import { Call } from "../../src/utils";
-import { PASS } from "../../src/annotations/service/types";
-import { NetworkService } from "../../src/service";
+import { Call } from "../../src/stream/call";
+import { NetworkService, PASS } from "../../src/networking";
 
 export class User extends Model {
   @Field() name!: string;

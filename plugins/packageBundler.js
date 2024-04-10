@@ -3,7 +3,7 @@ import path from "path";
 
 /**
  * bundles package.json file
- * @param {({name: string; version: string; description?: string; dependencies: Array<{[string: string]: any}>, author?: string; mainDeclarationFile?: string; main?: string;})} packageDetails
+ * @param {({name: string; version: string; description?: string; dependencies: Array<{[string: string]: any}>, author?: string; main?: string;modules: Array<string>})} packageDetails
  * @returns {{generateBundle(*, *, *): void, name: string}}
  */
 export default function packageBundler(packageDetails) {
@@ -26,7 +26,15 @@ export default function packageBundler(packageDetails) {
             dependencies: packageDetails.dependencies,
             author: packageDetails.author,
             main: packageDetails.main,
-            types: packageDetails.mainDeclarationFile ?? "./index.d.ts",
+            exports: Object.fromEntries(
+              packageDetails.modules.map((mod) => [
+                `./${mod}`,
+                {
+                  import: { types: `./${mod}.d.ts`, default: `./${mod}.mjs` },
+                  require: { types: `./${mod}.d.ts`, default: `./${mod}.cjs` },
+                },
+              ])
+            ),
           })
         );
       }

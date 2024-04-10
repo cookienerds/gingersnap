@@ -1,1 +1,1 @@
-export default class StreamEnded extends Error {}
+export class StreamEnded extends Error {}

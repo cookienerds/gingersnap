@@ -1,6 +1,9 @@
-import { HTTPStatus } from "../annotations/service/network";
+import { HTTPStatus } from "../networking/decorators";
 
-export default class NetworkError extends Error {
+/**
+ *Thrown to indicate some networking issue
+ */
+export class NetworkError extends Error {
   status: HTTPStatus;
 
   constructor(status: HTTPStatus, body?: string) {

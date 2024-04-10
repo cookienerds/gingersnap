@@ -1,1 +1,1 @@
-export default class StackEmptyError extends Error {}
+export class StackEmptyError extends Error {}

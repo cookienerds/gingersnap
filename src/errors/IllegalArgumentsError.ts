@@ -1,4 +1,7 @@
-export default class IllegalArgumentsError extends Error {
+/**
+ * Thrown to indicate that a method/function has been passed an illegal or inappropriate argument
+ */
+export class IllegalArgumentsError extends Error {
   readonly arguments: any[];
 
   constructor(args: any[]) {

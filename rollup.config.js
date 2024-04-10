@@ -9,22 +9,32 @@ const { name, author, description, dependencies, version } = JSON.parse(fs.readF
 export default (options) => {
   const config = {
     input: {
-      index: "./src/index.ts",
-      context: "./src/context.ts",
-      dataStructure: "./src/dataStructure.ts",
-      error: "./src/error.ts",
-      future: "./src/future.ts",
-      model: "./src/model.ts",
-      service: "./src/service.ts",
-      stream: "./src/stream.ts",
       synchronize: "./src/synchronize.ts",
       mocks: "./src/mocks.ts",
-      types: "./src/types.ts",
+      socket: "./src/socket.ts",
+      typing: "./src/typing/types.ts",
+      stream: "./src/stream/index.ts",
+      "stream/call": "./src/stream/call.ts",
+      "stream/state": "./src/stream/state.ts",
+      networking: "./src/networking/index.ts",
+      managers: "./src/managers/index.ts",
+      future: "./src/future/index.ts",
+      errors: "./src/errors/index.ts",
+      "data-structures/array": "./src/data-structures/array/index.ts",
+      "data-structures/object": "./src/data-structures/object/index.ts",
+      "data/decoders": "./src/data/decoders/index.ts",
+      "data/model": "./src/data/model/index.ts",
     },
     output: [
       {
         dir: "./lib",
         format: "es",
+        entryFileNames: "[name].mjs",
+      },
+      {
+        dir: "./lib",
+        format: "cjs",
+        entryFileNames: "[name].cjs",
       },
     ],
   };
@@ -39,6 +49,7 @@ export default (options) => {
           description,
           dependencies,
           version: options?.releaseVersion ?? version,
+          modules: Object.keys(config.input),
         }),
         typescript({ tsconfig: "./tsconfig.json" }),
       ],
@@ -51,6 +62,12 @@ export default (options) => {
           value.replace(".ts", ".d.ts").replace("./src", "./lib/dts"),
         ])
       ),
+      output: [
+        {
+          dir: "./lib",
+          format: "es",
+        },
+      ],
       plugins: [dts(), del({ targets: "lib/dts", hook: "buildEnd" })],
     },
   ];

@@ -9,9 +9,9 @@ import {
   PASS,
   POST,
   NetworkService,
-} from "../../src/service";
-import { BearerCredentials } from "../../src/annotations/model/credentials";
-import { Call } from "../../src/utils";
+} from "../../src/networking";
+import { BearerCredentials } from "../../src/data/model";
+import { Call } from "../../src/stream/call";
 
 export class AuthService extends NetworkService {
   @POST("api/v1/auth/login")

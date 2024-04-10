@@ -1,7 +1,6 @@
-import { Future, FutureGroup, FutureResult } from "../../../src/utils/future";
-import FutureCancelled from "../../../src/errors/FutureCancelled";
-import TimeoutError from "../../../src/errors/TimeoutError";
-import FutureError from "../../../src/errors/FutureError";
+import { Future, FutureGroup, FutureResult } from "../../../src/future";
+import { FutureCancelled, TimeoutError, FutureError } from "../../../src/errors";
+import { Collectors } from "../../../src/stream/collector";
 
 describe("Futures", function () {
   it("should fulfill successfully", async () => {
@@ -136,6 +135,6 @@ describe("Futures", function () {
     group.add(future);
     group.done();
     expect(await group.asSettled().execute()).toEqual({ future });
-    expect(await group.asSettled().collect()).toEqual([{ future }, { future: future2 }]);
+    expect(await group.asSettled().collect(Collectors.asList())).toEqual([{ future }, { future: future2 }]);
   });
 });

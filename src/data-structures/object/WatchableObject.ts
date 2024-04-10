@@ -1,6 +1,10 @@
 import { WaitableObject } from "./WaitableObject";
-import { Future, Queue, Stream, WaitPeriod } from "../../utils";
+import { Future, WaitPeriod } from "../../future";
+import { Stream } from "../../stream";
 import * as R from "ramda";
+import { SimpleQueue } from "./SimpleQueue";
+import { FutureEvent } from "../../synchronize";
+import { ExecutorState } from "../../stream/state";
 
 type GetListener<T> = (property: T) => void;
 type SetListener<T, K> = (property: T, oldValue: K | undefined, newValue: K) => void;
@@ -45,46 +49,74 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
     this.valuesListeners = [];
   }
 
+  /**
+   * Ingest data from the given stream into the queue. The future returned is
+   * already scheduled to execute in the background. However, you can cancel
+   * ingestion at anytime by cancelling the returned future
+   *
+   * Important Note:
+   * - Cancelling the ingestion does not kill the stream, only stops
+   * monitoring the stream for incoming data
+   * - If ingestion is cancelled and data had been retrieved at that period, the
+   * data will discarded
+   * @param stream input data stream
+   * @param keyExtractor used to get the key for storing the incoming data
+   */
+  ingest(stream: Stream<K>, keyExtractor: (v: K) => T): Future<void> {
+    return this.ingestStream(stream, (data) => this.set(keyExtractor(data), data));
+  }
+
   clone() {
     return super.clone() as WatchableObject<T, K>;
   }
 
   /**
    * Stream of changes made to the object via SET, DELETE or CLEAR commands
-   * @param queueSize
    */
-  changeStream(queueSize?: number) {
-    const queue = new Queue<WatchableChange<T, K>>(queueSize);
-    const cancelSet = this.onSet((key, oldValue, newValue) =>
+  changeStream() {
+    const evt = new FutureEvent();
+    const queue = new SimpleQueue<WatchableChange<T, K>>();
+    const cancelSet = this.onSet((key, oldValue, newValue) => {
       queue.enqueue({
         type: WatchableObjectOperations.SET,
         key,
         oldValue,
         newValue,
-      })
-    );
-    const cancelDelete = this.onDelete((key, oldValue) =>
+      });
+      evt.set();
+    });
+    const cancelDelete = this.onDelete((key, oldValue) => {
       queue.enqueue({
         type: WatchableObjectOperations.DELETE,
         key,
         oldValue,
-      })
-    );
-    const cancelClear = this.onClear(() =>
+      });
+      evt.set();
+    });
+    const cancelClear = this.onClear(() => {
       queue.enqueue({
         type: WatchableObjectOperations.CLEAR,
         key: "*" as any,
-      })
-    );
+      });
+      evt.set();
+    });
     const cleanup = R.once(() => {
       cancelClear();
       cancelSet();
       cancelDelete();
     });
 
-    return new Stream<WatchableChange<T, K>>((signal) => {
+    return new Stream<WatchableChange<T, K>>(async (signal) => {
       signal.onabort = cleanup;
-      return queue.awaitDequeue(signal);
+      while (queue.empty && !signal.aborted) {
+        await evt.wait();
+        evt.clear();
+      }
+
+      if (signal.aborted) {
+        return new ExecutorState(true);
+      }
+      return queue.dequeue();
     });
   }
 
@@ -199,5 +231,26 @@ export class WatchableObject<T, K> extends WaitableObject<T, K> {
       .thenApply(() => this.valuesListeners.forEach((listener) => listener()))
       .run();
     return super.values(copy);
+  }
+
+  protected ingestStream(stream: Stream<K>, handler: (v: K) => void): Future<void> {
+    return Future.of<void>(async (_, __, signal) => {
+      for await (const data of stream) {
+        while (!signal.aborted && this.objectMaxSize && this.size() === this.objectMaxSize) {
+          await Future.of((resolve, _, signal) => {
+            const cancel = this.onDelete(() => {
+              cancel();
+              resolve(null);
+            });
+            signal.onabort = cancel;
+          }).registerSignal(signal);
+        }
+
+        if (signal.aborted) {
+          break;
+        }
+        handler(data);
+      }
+    }).schedule();
   }
 }
