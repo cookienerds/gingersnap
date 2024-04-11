@@ -14,6 +14,7 @@ export default (options) => {
       socket: "./src/socket.ts",
       typing: "./src/typing/types.ts",
       stream: "./src/stream/index.ts",
+      "reflection/injector": "./src/reflection/injector.ts",
       "stream/call": "./src/stream/call.ts",
       "stream/state": "./src/stream/state.ts",
       "stream/collector": "./src/stream/collector.ts",
