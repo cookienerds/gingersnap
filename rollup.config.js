@@ -16,6 +16,7 @@ export default (options) => {
       stream: "./src/stream/index.ts",
       "stream/call": "./src/stream/call.ts",
       "stream/state": "./src/stream/state.ts",
+      "stream/collector": "./src/stream/collector.ts",
       networking: "./src/networking/index.ts",
       managers: "./src/managers/index.ts",
       future: "./src/future/index.ts",

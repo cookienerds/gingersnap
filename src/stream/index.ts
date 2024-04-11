@@ -4,7 +4,7 @@ import { AnyDataType, Flattened, InferErrorResult, InferStreamResult } from "../
 import { Future, FutureResult, WaitPeriod } from "../future";
 import { TimeableObject } from "../data-structures/object/TimeableObject";
 import { ExecutorState } from "./state";
-import { Collector, Collectors } from "./collector";
+import { Collector } from "./collector";
 
 enum ActionType {
   TRANSFORM,
