@@ -37,6 +37,12 @@ export class Stream<T> implements AsyncGenerator<T> {
 
   protected actions: Array<{ type: ActionType; functor: ActionFunctor<T> }>;
 
+  protected cancelHooks: Set<() => any>;
+
+  protected completionHooks: Set<() => any>;
+
+  protected completionHookInvoked: boolean;
+
   protected done: boolean;
 
   protected backlog: Array<{ records: T[] | Stream<T>; actionStream: number }>;
@@ -64,6 +70,21 @@ export class Stream<T> implements AsyncGenerator<T> {
     this.canRunExecutor = true;
     this.actions = [];
     this.backlog = [];
+    this.cancelHooks = new Set();
+    this.completionHooks = new Set();
+    this.completionHookInvoked = false;
+  }
+
+  /**
+   * Used to provide setup logic that should only be invoked once, when stream
+   * is starting. This setup logic must provide the actual data required, which
+   * can come from a Stream or Future
+   * @param supplier
+   */
+  public static seed<T>(supplier: () => Stream<T> | Future<T>): Stream<T> {
+    return new Future<T>((resolve, reject, signal) => {
+      resolve(supplier() as any);
+    }).stream;
   }
 
   /**
@@ -181,10 +202,10 @@ export class Stream<T> implements AsyncGenerator<T> {
     } else if (value instanceof Future) {
       let completed = false;
       return new Stream<K>(async (signal) => {
-        value.registerSignal(signal);
         if (completed) {
           return new ExecutorState(true);
         }
+        value.registerSignal(signal);
         completed = true;
         return new ExecutorState(false, await value) as any;
       });
@@ -399,11 +420,34 @@ export class Stream<T> implements AsyncGenerator<T> {
     newStream.executed = this.executed;
     newStream.done = this.done;
     newStream.backlog = [...this.backlog];
+    newStream.cancelHooks = new Set(this.cancelHooks);
+    newStream.completionHooks = new Set(this.completionHooks);
+    newStream.completionHookInvoked = this.completionHookInvoked;
     if (withSignals) {
       newStream.controller = this.controller;
     }
 
     return newStream;
+  }
+
+  public registerCancelHook(hook: () => any) {
+    this.cancelHooks.add(hook);
+    return this;
+  }
+
+  public removeCancelHook(hook: () => any) {
+    this.cancelHooks.delete(hook);
+    return this;
+  }
+
+  public registerCompletionHook(hook: () => any) {
+    this.completionHooks.add(hook);
+    return this;
+  }
+
+  public removeCompletionHook(hook: () => any) {
+    this.completionHooks.delete(hook);
+    return this;
   }
 
   /**
@@ -412,6 +456,18 @@ export class Stream<T> implements AsyncGenerator<T> {
    */
   public cancel(reason?: any): void {
     this.controller.abort(reason);
+    this.invokeCompletionHooks();
+    this.cancelHooks.forEach(
+      (handler) =>
+        new Promise((resolve, reject) => {
+          try {
+            handler();
+            resolve(null);
+          } catch (e) {
+            reject(e);
+          }
+        })
+    );
   }
 
   /**
@@ -596,6 +652,7 @@ export class Stream<T> implements AsyncGenerator<T> {
 
       if (state !== State.CONTINUE) {
         this.done = true;
+        this.invokeCompletionHooks();
         return value as T;
       }
     }
@@ -612,9 +669,11 @@ export class Stream<T> implements AsyncGenerator<T> {
         if (state === State.MATCHED && value !== undefined) return { done: false, value };
         if (state === State.DONE) {
           this.done = true;
+          this.invokeCompletionHooks();
           if (value !== undefined) return { done: false, value };
         }
         if (this.controller.signal.aborted) {
+          this.invokeCompletionHooks();
           this.done = true;
         }
       }
@@ -700,10 +759,10 @@ export class Stream<T> implements AsyncGenerator<T> {
               }
             }
             if (data instanceof Promise) data = await data;
-            if (data instanceof Future) data = await data;
+            if (data instanceof Future) data = await data.registerSignal(this.controller.signal);
             if (data instanceof FutureResult) data = data.value;
             if (data instanceof Stream) {
-              this.backlog.push({ actionStream: 0, records: data });
+              this.backlog.push({ actionStream: 0, records: data.cancelOnSignal(this.controller.signal) });
               return { state: State.CONTINUE };
             }
           } while (data instanceof ExecutorState);
@@ -802,6 +861,25 @@ export class Stream<T> implements AsyncGenerator<T> {
       }
     }
     return { state: State.MATCHED, value: data };
+  }
+
+  private invokeCompletionHooks() {
+    if (this.completionHookInvoked) {
+      return;
+    }
+
+    this.completionHookInvoked = true;
+    this.completionHooks.forEach(
+      (handler) =>
+        new Promise((resolve, reject) => {
+          try {
+            handler();
+            resolve(null);
+          } catch (e) {
+            reject(e);
+          }
+        })
+    );
   }
 
   private async processError(

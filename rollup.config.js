@@ -18,6 +18,7 @@ export default (options) => {
       "stream/call": "./src/stream/call.ts",
       "stream/state": "./src/stream/state.ts",
       "stream/collector": "./src/stream/collector.ts",
+      "stream/observable": "./src/stream/observable.ts",
       networking: "./src/networking/index.ts",
       managers: "./src/managers/index.ts",
       future: "./src/future/index.ts",
@@ -26,6 +27,7 @@ export default (options) => {
       "data-structures/object": "./src/data-structures/object/index.ts",
       "data/decoders": "./src/data/decoders/index.ts",
       "data/model": "./src/data/model/index.ts",
+      "data/bus": "./src/data/bus.ts",
     },
     output: [
       {
